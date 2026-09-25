@@ -27,9 +27,35 @@ internal static class FlowPreferencesTests
                     settings.Resolve([window, window with { Handle = 13 }], window with { ProcessId = 999 }) is not null)
                     throw new Exception("Explicit selection or recycled window identity was mishandled.");
             }
+            var defaults = new FlowPreferences();
+            if (!defaults.CompletionAlertsEnabled || !defaults.CompletionBanner || !defaults.CompletionSound ||
+                defaults.CompletionDialog || defaults.CompletionBorder || defaults.CompletionDurationSeconds != 4)
+                throw new Exception("Completion alert defaults changed.");
+            File.WriteAllText(path, "{\"AutoSwitch\":true}");
+            var migrated = FlowPreferences.Load(path);
+            if (!migrated.AutoSwitch || !migrated.CompletionAlertsEnabled || !migrated.CompletionBanner || !migrated.CompletionSound)
+                throw new Exception("Older settings did not receive completion alert defaults.");
+            foreach (var enabled in new[] { false, true })
+            foreach (var banner in new[] { false, true })
+            foreach (var sound in new[] { false, true })
+            foreach (var dialog in new[] { false, true })
+            foreach (var border in new[] { false, true })
+            foreach (var duration in new[] { 2, 4, 10 })
+            {
+                var settings = defaults with { CompletionAlertsEnabled = enabled, CompletionBanner = banner,
+                    CompletionSound = sound, CompletionDialog = dialog, CompletionBorder = border,
+                    CompletionDurationSeconds = duration };
+                settings.Save(path);
+                if (FlowPreferences.Load(path) != settings) throw new Exception("Completion alert settings did not persist.");
+            }
             var original = File.ReadAllText(path);
             try { new FlowPreferences { TargetTitle = null! }.Save(path); throw new Exception("Invalid setting accepted."); }
             catch (InvalidDataException) { }
+            foreach (var duration in new[] { 1, 3, 11 })
+            {
+                try { (defaults with { CompletionDurationSeconds = duration }).Save(path); throw new Exception("Invalid alert duration accepted."); }
+                catch (InvalidDataException) { }
+            }
             if (File.ReadAllText(path) != original) throw new Exception("Failed settings save damaged prior data.");
             Directory.CreateDirectory(path + ".tmp");
             try { new FlowPreferences().Save(path); throw new Exception("Expected settings write failure."); }

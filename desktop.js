@@ -66,6 +66,30 @@
     send('flowSettings', fields);
   }
 
+  function renderCompletionSettings() {
+    const completion = state.completion || { enabled: true, banner: true, sound: true, dialog: false, border: false, durationSeconds: 4 };
+    $('completion-enabled').checked = completion.enabled;
+    for (const [name, id] of [['banner', 'completion-banner'], ['sound', 'completion-sound'],
+      ['dialog', 'completion-dialog'], ['border', 'completion-border']]) $(id).checked = completion[name];
+    $('completion-duration').value = String(completion.durationSeconds);
+    $('completion-enabled').disabled = isBusy();
+    for (const id of ['completion-banner', 'completion-sound', 'completion-dialog', 'completion-border', 'completion-duration'])
+      $(id).disabled = isBusy() || !completion.enabled;
+    $('completion-preview-sound').disabled = isBusy() || !completion.enabled;
+  }
+
+  function submitCompletionSettings() {
+    if (view !== 'settings' || isBusy()) return;
+    send('completionSettings', {
+      enabled: !!$('completion-enabled').checked,
+      banner: !!$('completion-banner').checked,
+      sound: !!$('completion-sound').checked,
+      dialog: !!$('completion-dialog').checked,
+      border: !!$('completion-border').checked,
+      durationSeconds: Number($('completion-duration').value)
+    });
+  }
+
   function renderLibrary() {
     const library = $('saved-scripts');
     library.replaceChildren();
@@ -374,6 +398,7 @@
     $('nav-editor').disabled = isBusy();
     $('nav-settings').disabled = isBusy();
     renderFlowSettings();
+    renderCompletionSettings();
     $('nav-execution').disabled = isBusy();
     $('status-text').textContent = state.namingRequired ? '錄好了，幫腳本取個名字吧' : ({ ready: '準備好了', recording: '正在錄製', paused: '錄製已暫停', running: '正在執行腳本' })[state.mode] || '錯誤';
     $('status-hint').textContent = state.message;
@@ -435,6 +460,9 @@
     $('nav-execution').addEventListener('click', () => navigate('execution'));
     $('nav-settings').addEventListener('click', () => navigate('settings'));
     for (const id of ['flow-auto', 'flow-manual', 'flow-return', 'flow-stay']) $(id).addEventListener('change', () => submitFlowSettings());
+    for (const id of ['completion-enabled', 'completion-banner', 'completion-sound', 'completion-dialog', 'completion-border', 'completion-duration'])
+      $(id).addEventListener('change', submitCompletionSettings);
+    $('completion-preview-sound').addEventListener('click', () => { if (!isBusy() && view === 'settings') send('previewCompletionSound'); });
     $('flow-target').addEventListener('change', () => submitFlowSettings(true));
     $('flow-refresh').addEventListener('click', () => { if (!isBusy()) send('refresh'); });
     $('delete-script').addEventListener('click', () => {

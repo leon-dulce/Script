@@ -7,6 +7,12 @@ internal sealed record FlowPreferences
 {
     public bool AutoSwitch { get; init; }
     public bool ReturnToApp { get; init; }
+    public bool CompletionAlertsEnabled { get; init; } = true;
+    public bool CompletionBanner { get; init; } = true;
+    public bool CompletionSound { get; init; } = true;
+    public bool CompletionDialog { get; init; }
+    public bool CompletionBorder { get; init; }
+    public int CompletionDurationSeconds { get; init; } = 4;
     public string TargetTitle { get; init; } = "";
     public string TargetProcess { get; init; } = "";
     public string TargetPath { get; init; } = "";
@@ -45,7 +51,8 @@ internal sealed record FlowPreferences
     private static void Validate(FlowPreferences value)
     {
         if (value.TargetTitle is null || value.TargetProcess is null || value.TargetPath is null ||
-            value.TargetTitle.Length > 512 || value.TargetProcess.Length > 256 || value.TargetPath.Length > 32768)
-            throw new InvalidDataException("視窗設定無效。");
+            value.TargetTitle.Length > 512 || value.TargetProcess.Length > 256 || value.TargetPath.Length > 32768 ||
+            value.CompletionDurationSeconds is not (2 or 4 or 6 or 10))
+            throw new InvalidDataException("視窗或執行提示設定無效。");
     }
 }

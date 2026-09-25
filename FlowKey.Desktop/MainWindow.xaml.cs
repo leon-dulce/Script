@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Media;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Interop;
@@ -26,6 +27,8 @@ public partial class MainWindow : Window
     private ScriptDocument? _executionScript;
     private string _workspace = "editor";
     private FlowPreferences _flowPreferences = new();
+    private CompletionOverlay? _completionOverlay;
+    private RunResult? _runResult;
     private WindowInfo? _flowTargetIdentity;
     private WindowActivationWait? _activationWait;
     private string _flowMessage = "改好就會儲存，所有腳本都會使用這組設定。";
@@ -61,7 +64,7 @@ public partial class MainWindow : Window
         Browser.DefaultBackgroundColor = System.Drawing.Color.FromArgb(23, 26, 32);
         SourceInitialized += (_, _) => WindowTheme.Apply(new WindowInteropHelper(this).Handle);
         try { _flowPreferences = FlowPreferences.Load(FlowSettingsPath); }
-        catch (Exception error) when (error is IOException or JsonException or UnauthorizedAccessException)
+        catch (Exception error) when (error is IOException or JsonException or UnauthorizedAccessException or InvalidDataException)
         { _flowMessage = "上次的設定沒有讀取成功，這次先用手動切換：" + error.Message; }
         Loaded += OnLoaded;
         Closing += OnClosing;
@@ -152,6 +155,7 @@ public partial class MainWindow : Window
     {
         StopHooks();
         _playback?.Cancel();
+        _completionOverlay?.Close();
         ReleasePlaybackKeys();
         if (_handle != 0) Native.UnregisterHotKey(_handle, 1);
         _focusTimer.Stop();
@@ -230,7 +234,7 @@ public partial class MainWindow : Window
         _windows.AddRange(Native.ListWindows(_handle));
         if (_target is { } target && !Native.Matches(target))
         {
-            if (_mode == "running") StopRun("目標視窗已關閉，已停止執行。");
+            if (_mode == "running") StopRun("目標視窗已關閉，已停止執行。", result: RunResult.Interrupted);
             _target = null;
             _pendingRecord = false;
             _pendingRun = false;
@@ -246,6 +250,9 @@ public partial class MainWindow : Window
             mode = _mode, workspace = _workspace, message = _message, currentStep = _currentStep,
             flow = new { autoSwitch = _flowPreferences.AutoSwitch, returnToApp = _flowPreferences.ReturnToApp,
                 targetTitle = _flowPreferences.TargetTitle, targetId = _flowPreferences.Resolve(_windows, _flowTargetIdentity)?.Handle.ToString() ?? "", message = _flowMessage },
+            completion = new { enabled = _flowPreferences.CompletionAlertsEnabled, banner = _flowPreferences.CompletionBanner,
+                sound = _flowPreferences.CompletionSound, dialog = _flowPreferences.CompletionDialog,
+                border = _flowPreferences.CompletionBorder, durationSeconds = _flowPreferences.CompletionDurationSeconds },
             currentIteration = _currentIteration, waitingForNextRun = _waitingForNextRun,
             pendingRecord = _pendingRecord, pendingRun = _pendingRun, dirty = _dirty,
             switchingWindow = _pendingRun && _activationWait is not null,
@@ -280,6 +287,9 @@ public partial class MainWindow : Window
                 case "discardRecording": DiscardRecording(); break;
                 case "workspace": SetWorkspace(root.GetProperty("value").GetString()); break;
                 case "flowSettings": SetFlowSettings(root); break;
+                case "completionSettings": SetCompletionSettings(root); break;
+                case "previewCompletionSound": if (_workspace == "settings" && _mode == "ready" && !_pendingRun &&
+                    _flowPreferences.CompletionAlertsEnabled) SystemSounds.Asterisk.Play(); break;
                 case "openScript": OpenScript(root.GetProperty("id").GetString()); break;
                 case "deleteScript": DeleteScript(root.GetProperty("id").GetString()); break;
                 case "select": SelectWindow(root.GetProperty("value").GetString()); break;
@@ -382,6 +392,23 @@ public partial class MainWindow : Window
         }
         try { next.Save(FlowSettingsPath); _flowPreferences = next; _flowTargetIdentity = nextTarget; _flowMessage = "設定已儲存，所有腳本都會使用這組設定。"; }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        { _flowMessage = "這次設定沒有存好，先保留原本的設定：" + error.Message; }
+    }
+
+    private void SetCompletionSettings(JsonElement root)
+    {
+        if (_workspace != "settings" || _mode != "ready" || _pendingRun || _namingRequired) return;
+        var next = _flowPreferences with
+        {
+            CompletionAlertsEnabled = root.GetProperty("enabled").GetBoolean(),
+            CompletionBanner = root.GetProperty("banner").GetBoolean(),
+            CompletionSound = root.GetProperty("sound").GetBoolean(),
+            CompletionDialog = root.GetProperty("dialog").GetBoolean(),
+            CompletionBorder = root.GetProperty("border").GetBoolean(),
+            CompletionDurationSeconds = root.GetProperty("durationSeconds").GetInt32()
+        };
+        try { next.Save(FlowSettingsPath); _flowPreferences = next; _flowMessage = "設定已儲存，所有腳本都會使用這組設定。"; }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException)
         { _flowMessage = "這次設定沒有存好，先保留原本的設定：" + error.Message; }
     }
 
@@ -661,7 +688,7 @@ public partial class MainWindow : Window
             { _pendingRun = false; _message = "目標視窗已關閉或尺寸變化，取消等待執行。"; Publish(); }
             else if (IsTargetReady(target)) { _pendingRun = false; StartRun(); }
         }
-        if (_mode == "running" && !IsTargetReady(target)) StopRun("目標視窗失焦、關閉或尺寸變化，已停止執行。");
+        if (_mode == "running" && !IsTargetReady(target)) StopRun("目標視窗失焦、關閉或尺寸變化，已停止執行。", result: RunResult.Interrupted);
     }
 
     private void RequestRun()
@@ -729,6 +756,7 @@ public partial class MainWindow : Window
         if (problem is not null) { _message = problem; Publish(); return; }
         if (Native.GetForegroundWindow() != target.Handle) { _message = "請先切到要操作的視窗，再開始執行。"; Publish(); return; }
         _playback = new CancellationTokenSource();
+        _runResult = null;
         _session.BeginRun(); _currentStep = -1; _currentIteration = 0; _waitingForNextRun = false;
         _message = "正在執行；再按快捷鍵可停止。";
         Publish();
@@ -738,6 +766,7 @@ public partial class MainWindow : Window
     private async Task RunStepsAsync(WindowInfo target, CancellationTokenSource run)
     {
         var returnToApp = _flowPreferences.ReturnToApp;
+        var scriptName = _script.Name;
         // Use one target layout for both down and up, including cleanup after focus changes.
         var keyboardLayout = Native.GetKeyboardLayout(Native.GetWindowThreadProcessId(target.Handle, out _));
         var keyboard = new KeyboardPlayback((key, release) => Native.SendKey(key, release, layout: keyboardLayout));
@@ -756,7 +785,7 @@ public partial class MainWindow : Window
                     await Task.Delay(step.DelayMs, cancellation);
                     cancellation.ThrowIfCancellationRequested();
                     if (!IsTargetReady(target))
-                    { StopRun("目標視窗發生變化，已停止執行。"); cancellation.ThrowIfCancellationRequested(); }
+                    { StopRun("目標視窗發生變化，已停止執行。", result: RunResult.Interrupted); cancellation.ThrowIfCancellationRequested(); }
                     await ExecuteStepAsync(target, step, keyboard, cancellation);
                     if (index == _script.Steps.Count - 1) keyboard.ReleaseAll();
                 },
@@ -768,30 +797,61 @@ public partial class MainWindow : Window
                     await Task.Delay(interval, cancellation);
                     cancellation.ThrowIfCancellationRequested();
                     if (!IsTargetReady(target))
-                    { StopRun("目標視窗發生變化，已停止執行。"); cancellation.ThrowIfCancellationRequested(); }
+                    { StopRun("目標視窗發生變化，已停止執行。", result: RunResult.Interrupted); cancellation.ThrowIfCancellationRequested(); }
                 }, run.Token);
-            StopRun($"執行完成，這次一共跑了 {_currentIteration} 輪。", run);
+            StopRun($"執行完成，這次一共跑了 {_currentIteration} 輪。", run, RunResult.Completed);
         }
         catch (OperationCanceledException) { /* StopRun already updated the UI. */ }
-        catch (Exception error) { StopRun($"執行失敗：{error.Message}", run); }
+        catch (Exception error) { StopRun($"執行失敗：{error.Message}", run, RunResult.Failed); }
         finally
         {
             try { keyboard.ReleaseAll(); }
             catch (Exception error)
             {
                 _message = $"釋放執行按鍵失敗：{error.Message}";
+                _runResult = RunResult.Failed;
                 Publish();
             }
             // SendInput queues events. Let the target process the final key/up before
-            // switching focus, otherwise a short script can lose its final actions.
+            // returning to FlowKey or opening a completion dialog, which takes focus.
+            await Task.Delay(100);
             if (returnToApp)
             {
-                await Task.Delay(100);
                 if (ReferenceEquals(_playback, run) && IsVisible && !Native.ActivateWindow(_handle))
                 { _message += " 沒有順利切回 FlowKey，請從工作列開啟。"; Publish(); }
             }
             if (ReferenceEquals(_playback, run)) { _playback = null; run.Dispose(); }
             if (ReferenceEquals(_playbackKeyboard, keyboard)) _playbackKeyboard = null;
+            if (_runResult is { } result) ShowRunResult(target.Handle, result, scriptName, _currentIteration);
+            _runResult = null;
+        }
+    }
+
+    private void ShowRunResult(nint target, RunResult result, string scriptName, long iterations)
+    {
+        if (!_flowPreferences.CompletionAlertsEnabled || !IsVisible) return;
+        try
+        {
+            _completionOverlay?.Close();
+            _completionOverlay = null;
+            if (_flowPreferences.CompletionBanner || _flowPreferences.CompletionBorder)
+            {
+                _completionOverlay = new CompletionOverlay(target, result, scriptName, iterations, _message,
+                    _flowPreferences.CompletionBanner, _flowPreferences.CompletionBorder, _flowPreferences.CompletionDurationSeconds);
+                _completionOverlay.Show();
+            }
+            if (_flowPreferences.CompletionSound)
+            {
+                if (result == RunResult.Completed) SystemSounds.Asterisk.Play();
+                else if (result == RunResult.Failed) SystemSounds.Hand.Play();
+            }
+            if (result == RunResult.Completed && _flowPreferences.CompletionDialog)
+                FlowDialog.Ask(this, $"「{scriptName}」執行完成，這次一共跑了 {iterations} 輪。");
+        }
+        catch (Exception error)
+        {
+            _message += $" 完成提示無法顯示：{error.Message}";
+            Publish();
         }
     }
 
@@ -827,12 +887,13 @@ public partial class MainWindow : Window
         }
     }
 
-    private void StopRun(string message, CancellationTokenSource? expected = null)
+    private void StopRun(string message, CancellationTokenSource? expected = null, RunResult result = RunResult.Stopped)
     {
         if (_mode != "running" || (expected is not null && !ReferenceEquals(_playback, expected))) return;
         _playback?.Cancel();
         var releaseError = ReleasePlaybackKeys();
         _session.StopRun(); _currentStep = -1; _waitingForNextRun = false; _message = releaseError ?? message;
+        _runResult = releaseError is null ? result : RunResult.Failed;
         Publish();
     }
 

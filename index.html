@@ -99,7 +99,7 @@
 </section></div></div>
 </div>
 <section aria-labelledby="settings-title" hidden="" id="settings-view">
-<div class="title-row"><div><p class="eyebrow">PREFERENCES</p><h1 id="settings-title">設定</h1><p class="subtitle">選擇開始和結束時要停在哪個視窗。這裡的設定會套用到所有腳本。</p></div></div>
+<div class="title-row"><div><p class="eyebrow">PREFERENCES</p><h1 id="settings-title">設定</h1><p class="subtitle">調整執行時的視窗切換與結束提示。這裡的設定會套用到所有腳本。</p></div></div>
 <div class="settings-grid"><section aria-labelledby="flow-title" class="card pad">
 <div class="card-header"><div><h2 class="card-title" id="flow-title">執行時的視窗切換</h2><p class="card-note">開始前要切去哪裡，結束後要不要回來，都可以在這裡設定。</p></div></div>
 <h3 class="card-title">開始執行時</h3>
@@ -113,6 +113,19 @@
 <label class="mode-choice"><input id="flow-return" name="flow-end" type="radio"/><strong>回到 FlowKey</strong><small>檢視執行結果，方便繼續操作。</small></label>
 <label class="mode-choice"><input checked="" id="flow-stay" name="flow-end" type="radio"/><strong>保持當前視窗</strong><small>結束後不切換，繼續使用目標程式。</small></label>
 </div>
+<section aria-labelledby="completion-title" class="completion-settings">
+<h2 class="card-title" id="completion-title">執行結果提示</h2>
+<p class="card-note">整段腳本完成後提示一次；手動停止、執行中斷或失敗會顯示不同文字。</p>
+<label class="completion-choice completion-master"><input checked="" id="completion-enabled" type="checkbox"/><span><strong>開啟執行結果提示</strong><small>關閉後，腳本結束時不顯示提示或播放聲音。</small></span></label>
+<div class="completion-options" id="completion-options">
+<label class="completion-choice"><input checked="" id="completion-banner" type="checkbox"/><span><strong>螢幕角落顯示提示</strong><small>不切換目前視窗，短暫顯示結果。</small></span></label>
+<label class="completion-choice"><input checked="" id="completion-sound" type="checkbox"/><span><strong>播放提示音</strong><small>完成時播放聲音；失敗時使用不同聲音。</small></span></label>
+<button class="muted-link completion-preview" id="completion-preview-sound" type="button">試聽提示音</button>
+<label class="completion-choice"><input id="completion-dialog" type="checkbox"/><span><strong>完成時顯示對話框</strong><small>需要按「知道了」才會關閉，並會切換焦點。</small></span></label>
+<label class="completion-choice"><input id="completion-border" type="checkbox"/><span><strong>螢幕邊框亮起</strong><small>在目標螢幕邊緣短暫顯示醒目邊框。</small></span></label>
+<label class="completion-duration" for="completion-duration">提示顯示時間<select id="completion-duration"><option value="2">2 秒</option><option value="4" selected="">4 秒</option><option value="6">6 秒</option><option value="10">10 秒</option></select></label>
+</div>
+</section>
 </section><aside class="card pad settings-summary"><h2>執行時會這樣進行</h2><div class="execution-summary" style="margin-top:24px"><strong>執行時會這樣進行</strong><p aria-live="polite" id="flow-preview"></p></div><p class="card-note" id="flow-save-status" role="status"></p><p class="card-note">選擇持續執行時，按停止後才會切換視窗。如果找不到目標視窗或切換失敗，腳本就不會開始。</p></aside></div></section>
 <div class="footer-note"><span>✦</span> 介面演示版 · 操作和視窗均為模擬，不會錄製或控制你的電腦</div>
 </main>

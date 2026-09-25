@@ -590,6 +590,40 @@ test('settings cannot interrupt recording, execution, pending start or naming', 
   }
 });
 
+test('completion alert settings show defaults, send every option, and disable choices with the master switch', () => {
+  const {get,sent,state,push}=desktop();
+  push(state({workspace:'settings'}));
+  assert.equal(get('completion-enabled').checked,true);
+  assert.equal(get('completion-banner').checked,true);
+  assert.equal(get('completion-sound').checked,true);
+  assert.equal(get('completion-dialog').checked,false);
+  assert.equal(get('completion-border').checked,false);
+  assert.equal(get('completion-duration').value,'4');
+  get('completion-dialog').checked=true;
+  get('completion-border').checked=true;
+  get('completion-duration').change('10');
+  assert.equal(sent.at(-1).action,'completionSettings');
+  assert.equal(sent.at(-1).durationSeconds,10);
+  assert.equal(sent.at(-1).dialog,true);
+  assert.equal(sent.at(-1).border,true);
+  get('completion-preview-sound').click();
+  assert.equal(sent.at(-1).action,'previewCompletionSound');
+  push(state({workspace:'settings',completion:{enabled:false,banner:false,sound:false,dialog:true,border:true,durationSeconds:2}}));
+  assert.equal(get('completion-enabled').checked,false);
+  assert.equal(get('completion-banner').disabled,true);
+  assert.equal(get('completion-duration').disabled,true);
+  assert.equal(get('completion-preview-sound').disabled,true);
+  assert.equal(get('completion-duration').value,'2');
+  get('completion-enabled').checked=true;
+  get('completion-enabled').change();
+  assert.equal(sent.at(-1).enabled,true);
+  for(const update of [{mode:'running'},{pendingRun:true},{namingRequired:true}]) {
+    push(state({...update,workspace:'settings'})); const before=sent.length;
+    get('completion-enabled').change(); get('completion-preview-sound').click();
+    assert.equal(sent.length,before);
+  }
+});
+
 
 test('settings navigation sits immediately above the local library footer', () => {
   assert.match(html, /class="nav sidebar-settings"[\s\S]*?id="nav-settings"[\s\S]*?<\/nav>\s*<div class="sidebar-bottom">/);

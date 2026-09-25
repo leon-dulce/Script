@@ -63,6 +63,7 @@ internal static class DesktopE2E
             Until(() => loaded, "embedded interface did not load", 30000);
             VerifyAppearance(app);
             VerifyDialogs(app);
+            VerifyOverlaySurface(app);
             target.Show();
             _keyboardTarget = new WindowInteropHelper(target).Handle;
             AcquireInitialTargetFocus(target, editor);
@@ -111,6 +112,7 @@ internal static class DesktopE2E
             ConfirmRecordingName(app, "E2E XY");
             WaitForNamedSave(app, catalog, firstId, "E2E XY", 1);
             VerifyWindowFlowSettings(app, target, editor);
+            VerifyCompletionAlerts(app, target, editor);
             VerifyAutomaticCrossProcessPlayback(app);
             Eval(app, "document.getElementById('nav-editor').click()");
             Until(() => EvalBool(app, "!document.getElementById('workspace-view').hidden"), "saved recording did not reopen for editing");
@@ -618,6 +620,130 @@ internal static class DesktopE2E
         Post(app, "{action:'flowSettings',autoSwitch:false,returnToApp:false,targetId:''}");
         Eval(app, "document.getElementById('nav-execution').click()");
         Console.WriteLine("PASS Windows settings page and four start/end flows; closed automatic target never sends keys");
+    }
+
+    private static void VerifyCompletionAlerts(MainWindow app, Window target, TextBox editor)
+    {
+        CompletionOverlay? VisibleOverlay() => Application.Current.Windows.OfType<CompletionOverlay>().FirstOrDefault(w => w.IsVisible);
+        var settingsPath = Path.Combine((string)typeof(MainWindow).GetField("_dataDirectory", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(app)!, "settings.json");
+        Eval(app, "document.getElementById('nav-settings').click()");
+        Until(() => EvalBool(app, "!document.getElementById('settings-view').hidden"), "completion settings page unavailable");
+        if (!EvalBool(app, "document.getElementById('completion-enabled').checked && document.getElementById('completion-banner').checked && document.getElementById('completion-sound').checked && !document.getElementById('completion-dialog').checked && !document.getElementById('completion-border').checked"))
+            throw new Exception("Completion defaults were not shown in Windows settings.");
+        Post(app, "{action:'completionSettings',enabled:true,banner:true,sound:true,dialog:false,border:true,durationSeconds:2}");
+        Until(() => FlowPreferences.Load(settingsPath) is { CompletionBorder: true, CompletionDurationSeconds: 2 }, "completion settings did not persist");
+        Eval(app, "document.getElementById('completion-preview-sound').click()");
+        Eval(app, "document.getElementById('nav-execution').click()");
+        editor.Clear();
+        ActivateTarget(target, editor);
+        PressHotkey(CurrentScript(app).Hotkey);
+        Until(() => editor.Text == "XY" && Text(app, "status-text") == "準備好了" && VisibleOverlay() is { Result: RunResult.Completed },
+            "completed script did not show the Windows overlay");
+        var overlay = VisibleOverlay()!;
+        if (!overlay.HasBanner || !overlay.HasBorder || Native.GetForegroundWindow() != new WindowInteropHelper(target).Handle)
+            throw new Exception("Completion banner or border was absent, or it stole target focus.");
+        var targetHandle = new WindowInteropHelper(target).Handle;
+        Native.GetClientRect(targetHandle, out var targetRect);
+        var center = new Native.Point { X = targetRect.Width / 2, Y = targetRect.Height / 2 };
+        Native.ClientToScreen(targetHandle, ref center);
+        if (GetAncestor(WindowFromPoint(center), 2) != targetHandle)
+            throw new Exception("Completion overlay intercepted mouse targeting over the target window.");
+        Until(() => !overlay.IsVisible, "completion overlay did not disappear after the configured duration", 4000);
+
+        Eval(app, "document.getElementById('nav-settings').click()");
+        Post(app, "{action:'completionSettings',enabled:false,banner:true,sound:true,dialog:true,border:true,durationSeconds:2}");
+        Until(() => FlowPreferences.Load(settingsPath).CompletionAlertsEnabled == false &&
+            EvalBool(app, "document.getElementById('completion-banner').disabled"), "master switch did not disable alert choices");
+        Eval(app, "document.getElementById('nav-execution').click()");
+        editor.Clear();
+        ActivateTarget(target, editor);
+        PressHotkey(CurrentScript(app).Hotkey);
+        Until(() => editor.Text == "XY" && Text(app, "status-text") == "準備好了", "script did not complete with alerts disabled");
+        PumpFor(200);
+        if (VisibleOverlay() is not null || app.OwnedWindows.OfType<FlowDialog>().Any(d => d.IsVisible))
+            throw new Exception("Disabled completion alerts still displayed a visual notification.");
+
+        Eval(app, "document.getElementById('nav-settings').click()");
+        Post(app, "{action:'completionSettings',enabled:true,banner:true,sound:false,dialog:true,border:false,durationSeconds:2}");
+        Until(() => FlowPreferences.Load(settingsPath) is { CompletionAlertsEnabled: true, CompletionDialog: true, CompletionSound: false },
+            "completion dialog setting did not persist");
+        Eval(app, "document.getElementById('nav-execution').click()");
+        bool dialogSeen = false;
+        string dialogMessage = "";
+        var dialogTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(30) };
+        dialogTimer.Tick += (_, _) =>
+        {
+            var dialog = app.OwnedWindows.OfType<FlowDialog>().FirstOrDefault(d => d.IsVisible);
+            if (dialog is null) return;
+            dialogMessage = dialog.Message.Text;
+            dialogSeen = dialogMessage.Contains("執行完成");
+            dialogTimer.Stop();
+            dialog.AcceptAction.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        };
+        dialogTimer.Start();
+        try
+        {
+            editor.Clear();
+            ActivateTarget(target, editor);
+            PressHotkey(CurrentScript(app).Hotkey);
+            try { Until(() => dialogSeen && editor.Text == "XY" && Text(app, "status-text") == "準備好了",
+                "completed script did not open a confirmable dialog"); }
+            catch (TimeoutException) { throw new Exception($"Completion dialog: seen={dialogSeen}, message={dialogMessage}, text={editor.Text}, status={Text(app, "status-text")}, hint={Text(app, "status-hint")}"); }
+        }
+        finally { dialogTimer.Stop(); }
+
+        // A stopped run uses different wording and never opens the success dialog.
+        var originalDelay = CurrentScript(app).Steps[0].DelayMs;
+        CurrentScript(app).Steps[0].DelayMs = 3000;
+        try
+        {
+            VisibleOverlay()?.Close();
+            editor.Clear();
+            ActivateTarget(target, editor);
+            PressHotkey(CurrentScript(app).Hotkey);
+            Until(() => Text(app, "status-text") == "正在執行腳本", "stop fixture did not start");
+            PressHotkey(CurrentScript(app).Hotkey);
+            Until(() => VisibleOverlay() is { Result: RunResult.Stopped }, "manual stop was mistaken for completion");
+            if (editor.Text.Length != 0 || app.OwnedWindows.OfType<FlowDialog>().Any(d => d.IsVisible))
+                throw new Exception("Stopped run sent keys or displayed the success dialog.");
+            VisibleOverlay()?.Close();
+            ActivateTarget(target, editor);
+            PressHotkey(CurrentScript(app).Hotkey);
+            Until(() => Text(app, "status-text") == "正在執行腳本", "interruption fixture did not start");
+            ActivateWindow(app);
+            Until(() => VisibleOverlay() is { Result: RunResult.Interrupted }, "target focus loss was mistaken for completion");
+            VisibleOverlay()?.Close();
+            ActivateTarget(target, editor);
+            PressHotkey(CurrentScript(app).Hotkey);
+            Until(() => Text(app, "status-text") == "正在執行腳本", "failure fixture did not start");
+            typeof(MainWindow).GetMethod("StopRun", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(app, ["執行失敗：模擬輸入錯誤", null, RunResult.Failed]);
+            Until(() => VisibleOverlay() is { Result: RunResult.Failed }, "failed run was mistaken for completion");
+            if (app.OwnedWindows.OfType<FlowDialog>().Any(d => d.IsVisible))
+                throw new Exception("Failed run displayed the success dialog.");
+        }
+        finally { CurrentScript(app).Steps[0].DelayMs = originalDelay; VisibleOverlay()?.Close(); }
+        Eval(app, "document.getElementById('nav-settings').click()");
+        Post(app, "{action:'completionSettings',enabled:true,banner:true,sound:true,dialog:false,border:false,durationSeconds:4}");
+        Eval(app, "document.getElementById('nav-execution').click()");
+        Console.WriteLine("PASS Windows completion alerts: persisted controls, non-activating banner/border, timeout, off switch, dialog, stopped, interrupted and failed results");
+    }
+
+    private static void VerifyOverlaySurface(MainWindow app)
+    {
+        var overlay = new CompletionOverlay(new WindowInteropHelper(app).Handle, RunResult.Completed,
+            "螢幕提示測試", 1, "", true, true, 2);
+        try
+        {
+            overlay.Show();
+            PumpFor(100);
+            var handle = new WindowInteropHelper(overlay).Handle;
+            if (!Native.GetClientRect(handle, out var bounds) || bounds.Width < 600 || bounds.Height < 400 ||
+                !overlay.HasBanner || !overlay.HasBorder || overlay.ShowActivated || overlay.ShowInTaskbar)
+                throw new Exception($"Screen overlay did not cover the monitor without activation: {bounds.Width}x{bounds.Height}.");
+        }
+        finally { overlay.Close(); }
+        Console.WriteLine("PASS Windows overlay covers the monitor and remains non-activating");
     }
 
     private static void VerifyAutomaticCrossProcessPlayback(MainWindow app)
