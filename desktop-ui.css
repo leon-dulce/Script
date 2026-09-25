@@ -28,3 +28,23 @@ main{padding-top:24px}.sidebar{padding-top:24px}.brand{padding-bottom:24px}.nav-
 .step-copy small,.footer-note{color:#a4adbd}.footer-note{border-top:1px solid var(--line);padding-top:12px}.sidebar-bottom{background:transparent;border-radius:0}
 .recording-name-dialog::backdrop{background:#0009}.naming-error{color:#ff9f96!important}input,select,button{color-scheme:dark}
 @media(max-width:650px){main{padding-top:20px}}
+
+/* The window is a fixed workspace; each tool owns its scroll area. */
+html,body{height:100%;overflow:hidden}.app{height:100dvh;min-height:0;overflow:hidden}
+main{height:100%;min-height:0;display:flex;flex-direction:column;overflow:hidden;padding:18px 22px 12px}
+.sidebar{height:100%;min-height:0;overflow:auto}.footer-note{flex:none;margin-top:10px;padding-top:8px;font-size:10px}
+#workspace-view,#execution-view,#settings-view{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+.title-row,.record-overview,.record-controls,.timeline-top,.current-action{flex:none}.title-row{margin-bottom:12px;padding-bottom:12px}.title-row .subtitle{margin-top:5px}
+.content,.execution-layout,.settings-grid{flex:1;min-height:0;overflow:hidden;align-items:stretch}
+.content>div:first-child,.execution-main{min-height:0;display:flex;flex-direction:column;overflow:hidden}
+.timeline{min-height:0;flex:1;display:flex;flex-direction:column;overflow:hidden}.steps,.execution-steps{min-height:0;max-height:none;flex:1;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
+.content .right{min-height:0;overflow:auto}.execution-main{gap:12px}.execution-progress-card{flex:none}
+.sidebar-library{min-height:0;display:flex;flex-direction:column;overflow:hidden}.saved-scripts{flex:1;min-height:0;max-height:none;overflow:auto;overscroll-behavior:contain}.library-title,.library-actions{flex:none}
+.execution-controls{min-height:0;overflow-y:auto;overscroll-behavior:contain;display:flex;flex-direction:column;grid-column:auto}.execution-controls>.card{flex:none}
+.settings-grid{grid-template-columns:minmax(0,1fr) 260px}.settings-grid>.card{min-height:0;max-height:100%;overflow-y:auto;overscroll-behavior:contain}.settings-summary{align-self:stretch}
+.execution-layout{grid-template-columns:160px minmax(0,1fr) 260px;gap:12px}
+*{scrollbar-width:thin;scrollbar-color:#535f72 #222730}
+@media(max-width:1100px){.execution-layout{grid-template-columns:135px minmax(0,1fr) 220px}.execution-controls>.card{padding:14px}.execution-layout .timeline{padding:12px}.execution-steps .step{grid-template-columns:22px minmax(0,1fr) auto;gap:6px}.execution-steps .step-icon{display:none}.settings-grid{grid-template-columns:minmax(0,1fr) 210px}.settings-grid>.card{padding:16px}.settings-grid .mode-choice{padding:12px}.app{grid-template-columns:175px minmax(0,1fr)}}
+@media(max-height:720px){.record-overview{gap:10px;margin-bottom:10px}.metric-card{padding:10px 14px;gap:4px}.metric-card strong{font-size:20px}.metric-info{padding:10px 14px}.metric-info p{margin:4px 0 0}.record-controls{margin-bottom:10px;padding:12px 16px!important}.title-row .subtitle{display:none}.timeline-top{margin-bottom:10px}.current-action{padding:10px;margin-bottom:8px}.settings-grid .mode-grid{margin:12px 0}.settings-grid .mode-choice{min-height:80px}}
+
+.steps>.step{flex:none}

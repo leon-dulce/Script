@@ -59,6 +59,7 @@ public partial class MainWindow : Window
         _catalog = new ScriptCatalog(Path.Combine(_dataDirectory, "scripts"));
         InitializeComponent();
         Browser.DefaultBackgroundColor = System.Drawing.Color.FromArgb(23, 26, 32);
+        SourceInitialized += (_, _) => WindowTheme.Apply(new WindowInteropHelper(this).Handle);
         try { _flowPreferences = FlowPreferences.Load(FlowSettingsPath); }
         catch (Exception error) when (error is IOException or JsonException or UnauthorizedAccessException)
         { _flowMessage = "設定未能載入，暫用手動切換：" + error.Message; }
@@ -72,6 +73,7 @@ public partial class MainWindow : Window
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         _handle = new WindowInteropHelper(this).Handle;
+        WindowTheme.Apply(_handle);
         HwndSource.FromHwnd(_handle).AddHook(OnWindowMessage);
         try
         {

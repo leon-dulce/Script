@@ -889,19 +889,28 @@ internal static class DesktopE2E
         Until(() => EvalBool(app, "document.fonts.check('600 24px \"FlowKey Serif\"','錄製與編輯') && document.querySelector('.brand img').naturalWidth>0"), "offline font or logo failed to load", 30000);
         if (app.Icon is null || !EvalBool(app, "document.documentElement.lang==='zh-Hant' && getComputedStyle(document.querySelector('.sidebar')).backgroundColor==='rgb(34, 39, 48)' && getComputedStyle(document.querySelector('.topbar')).display==='none' && !document.querySelector('.demo-badge')"))
             throw new Exception("Traditional Chinese layout or window icon missing.");
-        foreach (var width in new[] {850d,1180d,1600d})
+        WindowTheme.Apply(0); // Unsupported/invalid handles must not prevent startup.
+        var captionResult = WindowTheme.Apply(new WindowInteropHelper(app).Handle);
+        if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000) && captionResult != 0)
+            throw new Exception($"Windows rejected dark caption color: {captionResult:X8}.");
+        foreach (var (width, height) in new[] {(850d,620d),(1180d,800d),(1600d,900d)})
         {
             app.Width = width;
+            app.Height = height;
             PumpFor(200);
             foreach (var view in new[] {"editor","execution","settings"})
             {
                 Eval(app, "document.getElementById('nav-" + view + "').click()");
                 PumpFor(100);
-                if (!EvalBool(app, "document.documentElement.scrollWidth<=innerWidth+1"))
+                if (!EvalBool(app, "document.documentElement.scrollWidth<=innerWidth+1 && document.documentElement.scrollHeight<=innerHeight+1"))
                     throw new Exception($"Layout overflows at width {width} in {view}.");
+                var selector = view == "editor" ? "#steps" : view == "execution" ? "#execution-steps" : "#settings-view .settings-grid>.card";
+                if (!EvalBool(app, "(()=>{const e=document.querySelector('" + selector + "');e.insertAdjacentHTML('beforeend','<div style=\"min-height:5000px\">scroll test</div>');const r=e.getBoundingClientRect();e.scrollTop=e.scrollHeight;const ok=e.scrollTop>0&&r.height>40&&r.bottom<=innerHeight&&document.documentElement.scrollHeight<=innerHeight+1;e.lastElementChild.remove();e.scrollTop=0;return ok})()"))
+                    throw new Exception($"Panel did not contain its own scroll at {width}x{height} in {view}: " + Eval(app, "(()=>{const e=document.querySelector('" + selector + "');return [e.clientHeight,e.scrollHeight,e.getBoundingClientRect().bottom,innerHeight,getComputedStyle(e).overflowY,document.querySelector('main').clientHeight]})()"));
             }
         }
         app.Width = 1180;
+        app.Height = 800;
         Eval(app, "document.getElementById('nav-editor').click()");
         Console.WriteLine("PASS Traditional Chinese dark desktop layout, offline serif font, shared logo/window icon, and all pages at 850/1180/1600 widths");
     }
