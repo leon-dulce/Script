@@ -78,15 +78,15 @@ function desktop() {
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', 'desktop.js'), 'utf8'), { document, window });
   ready();
   const state = (overrides = {}) => ({
-    workspace: 'editor', mode: 'ready', message: '已选择窗口', currentStep: -1, currentIteration: 0,
+    workspace: 'editor', mode: 'ready', message: '已選擇視窗', currentStep: -1, currentIteration: 0,
     waitingForNextRun: false, pendingRun: false, pendingRecord: false, dirty: false, selectedId: '123',
-    recordingTargetTitle: '记事本', namingRequired: false, namingError: '',
-    windows: [{ id: '123', title: '记事本', process: 'notepad' }],
+    recordingTargetTitle: '記事本', namingRequired: false, namingError: '',
+    windows: [{ id: '123', title: '記事本', process: 'notepad' }],
     savedScripts: [
-      { id: 'a', name: '测试脚本', stepCount: 1, mode: 'Once' },
-      { id: 'b', name: '第二脚本', stepCount: 2, mode: 'Continuous' }
+      { id: 'a', name: '測試腳本', stepCount: 1, mode: 'Once' },
+      { id: 'b', name: '第二腳本', stepCount: 2, mode: 'Continuous' }
     ],
-    script: { id: 'a', name: '测试脚本', hotkey: 'F10', clientWidth: 800, clientHeight: 600,
+    script: { id: 'a', name: '測試腳本', hotkey: 'F10', clientWidth: 800, clientHeight: 600,
       execution: { mode: 'Once', repeatCount: 1, intervalMs: 1000 },
       steps: [{ type: 'Click', x: 2, y: 3, button: 'Left', delayMs: 100 }] },
     ...overrides
@@ -99,15 +99,31 @@ function descendants(element) {
   return element.children.flatMap(child => [child, ...descendants(child)]);
 }
 
+test('recording overview and breadcrumbs update from host state without changing script data', () => {
+  const { get, state, push } = desktop();
+  const s = state();
+  s.script.steps = [{type:'Key',keys:[81],keyAction:'Down',delayMs:350},{type:'Key',keys:[81],keyAction:'Up',delayMs:175}];
+  push(s);
+  assert.equal(get('record-total').textContent, '2');
+  assert.equal(get('record-seconds').textContent, '0.5');
+  assert.equal(get('workspace-breadcrumb').textContent, '錄製與編輯');
+  push({...s, workspace:'execution'});
+  assert.equal(get('workspace-breadcrumb').textContent, '執行腳本');
+  push({...s, workspace:'settings', script:{...s.script,steps:[]}});
+  assert.equal(get('workspace-breadcrumb').textContent, '設定');
+  assert.equal(get('record-total').textContent, '0');
+  assert.equal(get('record-seconds').textContent, '0.0');
+});
+
 test('global recording starts without a target and has no target or add-text controls', () => {
   const { get, select, sent, state, push } = desktop();
   push(state({ selectedId: '', windows: [], script: { ...state().script, steps: [], clientWidth: 0, clientHeight: 0 } }));
   for (const id of ['recording-target-config', 'recording-window-card', 'add-text', 'run-button', 'recording-progress']) assert.equal(get(id).hidden, true);
   assert.equal(get('record-button').hidden, false);
   assert.equal(get('record-button').disabled, false);
-  assert.match(select('.help').textContent, /切换窗口会继续记录/);
-  assert.match(descendants(get('steps')).map(e => e.textContent).join(' '), /可切换到其他窗口/);
-  assert.doesNotMatch(descendants(get('steps')).map(e => e.textContent).join(' '), /先设置窗口名称/);
+  assert.match(select('.help').textContent, /切換視窗會繼續記錄/);
+  assert.match(descendants(get('steps')).map(e => e.textContent).join(' '), /可切換到其他視窗/);
+  assert.doesNotMatch(descendants(get('steps')).map(e => e.textContent).join(' '), /先設定視窗名稱/);
   get('hotkey-select').change('F9');
   assert.equal(sent.at(-1).action, 'hotkey');
   get('record-button').click();
@@ -118,7 +134,7 @@ test('recording button stops a live recording but is blocked during naming and e
   const { get, sent, state, push } = desktop();
   push(state({ mode: 'recording', selectedId: '', windows: [] }));
   assert.equal(get('record-button').disabled, false);
-  assert.equal(get('record-button').querySelector('span').textContent, '停止录制');
+  assert.equal(get('record-button').querySelector('span').textContent, '停止錄製');
   get('record-button').click();
   assert.equal(sent.at(-1).action, 'record');
   for (const update of [{ namingRequired: true }, { workspace: 'execution', mode: 'running' }]) {
@@ -144,7 +160,7 @@ test('recording open-script and ready progress stay absent after updates and nav
   const { get, state, push } = desktop();
   for (const update of [{}, { pendingRecord: true }, { mode: 'recording' }, { mode: 'paused' },
     { workspace: 'execution', mode: 'running', currentStep: 0 },
-    { workspace: 'editor', message: '保存失败：请重试。', dirty: true }]) {
+    { workspace: 'editor', message: '儲存失敗：請重試。', dirty: true }]) {
     push(state(update));
     assert.equal(get('run-button').hidden, true);
     assert.equal(get('recording-progress').hidden, true);
@@ -152,14 +168,14 @@ test('recording open-script and ready progress stay absent after updates and nav
     assert.equal(get('finish-button').hidden, true);
   }
   push(state({ workspace: 'execution', mode: 'running', currentStep: 0 }));
-  assert.equal(get('execution-progress-label').textContent, '执行中');
+  assert.equal(get('execution-progress-label').textContent, '執行中');
   assert.equal(get('execution-progress-fraction').textContent, '1 / 1');
 });
 
 test('all saved scripts appear only on the execution page and host confirms workspace navigation', () => {
   const { get, sent, state, push } = desktop();
   const savedScripts = Array.from({ length: 40 }, (_, index) => ({
-    id: `script-${index}`, name: `脚本 ${index + 1}`, stepCount: index + 1, mode: 'Once'
+    id: `script-${index}`, name: `腳本 ${index + 1}`, stepCount: index + 1, mode: 'Once'
   }));
   push(state({ savedScripts }));
   assert.equal(get('saved-scripts').children.length, 40);
@@ -174,7 +190,7 @@ test('all saved scripts appear only on the execution page and host confirms work
   push(state({ workspace: 'execution', savedScripts }));
   assert.equal(get('workspace-view').hidden, true);
   assert.equal(get('sidebar-library').hidden, false);
-  assert.equal(get('saved-scripts').children[39].children[0].textContent, '脚本 40');
+  assert.equal(get('saved-scripts').children[39].children[0].textContent, '腳本 40');
   get('saved-scripts').children[39].click();
   assert.equal(sent.at(-1).action, 'openScript');
   assert.equal(sent.at(-1).id, 'script-39');
@@ -206,22 +222,22 @@ test('ending a recording opens a naming dialog and confirmation saves then opens
   push(state(pendingName));
   assert.equal(get('recording-name-dialog').open, true);
   assert.equal(get('recording-name-input').value, '');
-  assert.match(get('status-text').textContent, /等待命名保存/);
+  assert.match(get('status-text').textContent, /等待命名儲存/);
   assert.equal(get('add-text').disabled, true);
   assert.equal(sent.some(message => ['save', 'saveRecording'].includes(message.action)), false);
-  get('recording-name-input').value = '  每日报告  ';
+  get('recording-name-input').value = '  每日報告  ';
   push(state(pendingName));
-  assert.equal(get('recording-name-input').value, '  每日报告  ', 'host updates retain typed name');
+  assert.equal(get('recording-name-input').value, '  每日報告  ', 'host updates retain typed name');
   assert.equal(get('recording-name-dialog').showCount, 1);
   get('recording-name-confirm').click();
   assert.equal(sent.at(-1).action, 'saveRecording');
-  assert.equal(sent.at(-1).name, '每日报告');
+  assert.equal(sent.at(-1).name, '每日報告');
   assert.equal(get('recording-name-dialog').open, true, 'dialog waits for successful host response');
-  push(state({ workspace: 'execution', script: { ...state().script, name: '每日报告' }, message: '已保存「每日报告」。' }));
+  push(state({ workspace: 'execution', script: { ...state().script, name: '每日報告' }, message: '已儲存「每日報告」。' }));
   assert.equal(get('recording-name-dialog').open, false);
   assert.equal(get('execution-view').hidden, false);
   assert.equal(get('sidebar-library').hidden, false);
-  assert.equal(get('execution-script-name').textContent, '每日报告');
+  assert.equal(get('execution-script-name').textContent, '每日報告');
 });
 
 test('naming rejects blank and overly long names, retains errors and retries after save failures', () => {
@@ -231,7 +247,7 @@ test('naming rejects blank and overly long names, retains errors and retries aft
   get('recording-name-input').value = '   ';
   get('recording-name-confirm').click();
   assert.equal(sent.length, 1);
-  assert.match(get('recording-name-error').textContent, /请输入/);
+  assert.match(get('recording-name-error').textContent, /請輸入/);
   get('recording-name-input').value = '名'.repeat(101);
   get('recording-name-confirm').click();
   assert.equal(sent.length, 1);
@@ -240,13 +256,13 @@ test('naming rejects blank and overly long names, retains errors and retries aft
   get('recording-name-input').dispatch('keydown', { key: 'Enter' });
   assert.equal(sent.at(-1).action, 'saveRecording');
   assert.equal(sent.at(-1).name.length, 100);
-  push(state({ ...pendingName, namingError: '保存失败：磁碟已满，请释放空间后重试。' }));
+  push(state({ ...pendingName, namingError: '儲存失敗：磁碟已滿，請釋放空間後重試。' }));
   assert.equal(get('recording-name-dialog').open, true);
   assert.equal(get('recording-name-input').value.length, 100);
-  assert.match(get('recording-name-error').textContent, /磁碟已满/);
-  get('recording-name-input').value = '重新保存';
+  assert.match(get('recording-name-error').textContent, /磁碟已滿/);
+  get('recording-name-input').value = '重新儲存';
   get('recording-name-confirm').click();
-  assert.equal(sent.at(-1).name, '重新保存');
+  assert.equal(sent.at(-1).name, '重新儲存');
 });
 
 test('Escape cannot silently discard naming, explicit discard requires confirmation', () => {
@@ -285,17 +301,17 @@ test('recording shows each key down and up with its precise interval and follows
   for (let count = 1; count <= steps.length; count++) {
     push(state({ mode: 'recording', script: { ...state().script, steps: steps.slice(0, count) } }));
     assert.equal(get('steps').children.length, count);
-    assert.equal(get('step-count').textContent, `${count} 个步骤`);
+    assert.equal(get('step-count').textContent, `${count} 個步驟`);
     assert.equal(scrolled.length, count);
     assert.equal(scrolled.at(-1).row, get('steps').children[count - 1]);
   }
   const rows = get('steps').children;
-  assert.equal(rows[0].children[2].children[0].textContent, '按下按键');
+  assert.equal(rows[0].children[2].children[0].textContent, '按下按鍵');
   assert.equal(rows[0].children[2].children[1].textContent, '左 Ctrl');
-  assert.equal(rows[3].children[2].children[0].textContent, '松开按键');
+  assert.equal(rows[3].children[2].children[0].textContent, '鬆開按鍵');
   assert.equal(rows[3].children[2].children[1].textContent, 'A');
   for (let index = 0; index < rows.length; index++) {
-    assert.equal(rows[index].children[3].children[0].textContent, `间隔 ${steps[index].delayMs} 毫秒`);
+    assert.equal(rows[index].children[3].children[0].textContent, `間隔 ${steps[index].delayMs} 毫秒`);
     assert.equal(rows[index].children[3].children[1].hidden, true);
   }
   push(state({ mode: 'recording', script: { ...state().script, steps } }));
@@ -308,20 +324,20 @@ test('recording shows each key down and up with its precise interval and follows
 test('key labels cover legacy combinations, modifiers, function keys, number pad and punctuation', () => {
   const { get, state, push } = desktop();
   const keyCases = [
-    [[17, 83], undefined, '按键', 'Ctrl + S'],
-    [[16, 9], 'Press', '按键', 'Shift + Tab'],
-    [[161], 'Down', '按下按键', '右 Shift'],
-    [[165], 'Up', '松开按键', '右 Alt'],
-    [[112], 'Down', '按下按键', 'F1'],
-    [[135], 'Up', '松开按键', 'F24'],
-    [[96], 'Down', '按下按键', 'Numpad 0'],
-    [[105], 'Up', '松开按键', 'Numpad 9'],
-    [[107], 'Down', '按下按键', 'Numpad +'],
-    [[48], 'Down', '按下按键', '0'],
-    [[32], 'Up', '松开按键', 'Space'],
-    [[186], 'Down', '按下按键', '; / :'],
-    [[220], 'Down', '按下按键', '\\ / |'],
-    [[255], 'Press', '按键', '按键 0xFF']
+    [[17, 83], undefined, '按鍵', 'Ctrl + S'],
+    [[16, 9], 'Press', '按鍵', 'Shift + Tab'],
+    [[161], 'Down', '按下按鍵', '右 Shift'],
+    [[165], 'Up', '鬆開按鍵', '右 Alt'],
+    [[112], 'Down', '按下按鍵', 'F1'],
+    [[135], 'Up', '鬆開按鍵', 'F24'],
+    [[96], 'Down', '按下按鍵', 'Numpad 0'],
+    [[105], 'Up', '鬆開按鍵', 'Numpad 9'],
+    [[107], 'Down', '按下按鍵', 'Numpad +'],
+    [[48], 'Down', '按下按鍵', '0'],
+    [[32], 'Up', '鬆開按鍵', 'Space'],
+    [[186], 'Down', '按下按鍵', '; / :'],
+    [[220], 'Down', '按下按鍵', '\\ / |'],
+    [[255], 'Press', '按鍵', '按鍵 0xFF']
   ];
   const steps = keyCases.map(([keys, keyAction]) => ({ type: 'Key', keys, keyAction, delayMs: 0 }));
   push(state({ script: { ...state().script, steps } }));
@@ -347,13 +363,13 @@ test('step interval editing accepts full recorded range and rejects invalid valu
     assert.equal(sent.at(-1).value, Number(value));
   }
   push(state({ script: { ...state().script, steps: [{ ...state().script.steps[0], delayMs: 2147483647 }] } }));
-  assert.equal(get('steps').children[0].children[3].children[0].textContent, '间隔 2147483647 毫秒');
+  assert.equal(get('steps').children[0].children[3].children[0].textContent, '間隔 2147483647 毫秒');
 });
 
 test('execution mode and hotkey changes apply directly without save or editor controls', () => {
   const { get, sent, state, push } = desktop();
   push(state({ workspace: 'execution', dirty: true }));
-  assert.equal(get('execution-script-name').textContent, '测试脚本');
+  assert.equal(get('execution-script-name').textContent, '測試腳本');
   assert.equal(get('repeat-count').disabled, true);
   assert.equal(get('repeat-interval').disabled, true);
   get('mode-once').checked = false;
@@ -375,9 +391,9 @@ test('execution mode and hotkey changes apply directly without save or editor co
   get('execution-hotkey').change('F11');
   assert.equal(sent.at(-1).action, 'hotkey');
   assert.equal(sent.at(-1).value, 'F11');
-  push(state({ workspace: 'execution', message: '执行设置已自动保存。' }));
+  push(state({ workspace: 'execution', message: '執行設定已自動儲存。' }));
   assert.equal(get('execution-view').hidden, false);
-  assert.match(get('execution-message').textContent, /自动保存/);
+  assert.match(get('execution-message').textContent, /自動儲存/);
   assert.equal(sent.some(message => message.action === 'save'), false);
 });
 
@@ -419,13 +435,13 @@ test('execution displays every readonly step, highlights the current action, and
   push(state(running));
   const rows = get('execution-steps').children;
   assert.equal(rows.length, 5);
-  assert.equal(get('execution-step-count').textContent, '5 个步骤');
+  assert.equal(get('execution-step-count').textContent, '5 個步驟');
   assert.equal(descendants(get('execution-steps')).some(item => ['input', 'button', 'select'].includes(item.tagName)), false);
   assert.equal(rows.filter(row => row.className.includes('current')).length, 1);
   assert.equal(rows[2]['aria-current'], 'step');
   assert.equal(rows[2].children[2].children[1].textContent, '<script>text stays text</script>');
-  assert.equal(rows[1].children[3].textContent, '间隔 0 毫秒');
-  assert.match(get('execution-current-action').textContent, /第 3 步 · 输入文字/);
+  assert.equal(rows[1].children[3].textContent, '間隔 0 毫秒');
+  assert.match(get('execution-current-action').textContent, /第 3 步 · 輸入文字/);
   assert.equal(get('execution-progress-fraction').textContent, '3 / 5');
   assert.equal(get('execution-progress-fill').style.width, '60%');
   assert.equal(scrolled.length, 1);
@@ -435,35 +451,35 @@ test('execution displays every readonly step, highlights the current action, and
   assert.equal(scrolled.length, 1, 'unrelated updates do not repeatedly scroll the steps');
   push(state({ ...running, currentStep: -1, waitingForNextRun: true }));
   assert.equal(get('execution-steps').children.some(row => row.className.includes('current')), false);
-  assert.match(get('execution-current-action').textContent, /第 2 轮已完成，等待 500 毫秒/);
-  assert.equal(get('execution-progress-label').textContent, '等待下一轮');
-  assert.equal(get('cycle-number').textContent, '2 / 3 · 等待下一轮');
+  assert.match(get('execution-current-action').textContent, /第 2 輪已完成，等待 500 毫秒/);
+  assert.equal(get('execution-progress-label').textContent, '等待下一輪');
+  assert.equal(get('cycle-number').textContent, '2 / 3 · 等待下一輪');
   push(state({ ...running, currentIteration: 3, currentStep: 0 }));
   assert.equal(scrolled.length, 2);
   assert.equal(get('execution-steps').children[0]['aria-current'], 'step');
   push(state({ workspace: 'execution', script: running.script }));
   assert.equal(get('execution-steps').children.some(row => row.className.includes('current')), false);
-  assert.match(get('execution-current-action').textContent, /等待执行/);
+  assert.match(get('execution-current-action').textContent, /等待執行/);
 });
 
 test('execution can be requested without manual target selection and displays pending or failure feedback', () => {
   const { get, sent, state, push } = desktop();
   push(state({ workspace: 'execution', selectedId: '' }));
   assert.equal(get('execution-start').disabled, false);
-  assert.match(get('execution-help').textContent, /目标窗口按 F10/);
+  assert.match(get('execution-help').textContent, /目標視窗按 F10/);
   get('execution-start').click();
   assert.equal(sent.at(-1).action, 'run');
-  push(state({ workspace: 'execution', selectedId: '', pendingRun: true, message: '切回目标窗口后开始。' }));
-  assert.equal(get('execution-start').textContent, '■ 停止执行');
-  assert.equal(get('execution-progress-label').textContent, '等待目标窗口');
-  assert.equal(get('execution-current-action').textContent, '等待目标窗口进入前台');
-  assert.match(get('execution-help').textContent, /再次点击可取消等待/);
-  assert.doesNotMatch(get('execution-help').textContent, /按快捷键可取消/);
+  push(state({ workspace: 'execution', selectedId: '', pendingRun: true, message: '切回目標視窗後開始。' }));
+  assert.equal(get('execution-start').textContent, '■ 停止執行');
+  assert.equal(get('execution-progress-label').textContent, '等待目標視窗');
+  assert.equal(get('execution-current-action').textContent, '等待目標視窗進入前臺');
+  assert.match(get('execution-help').textContent, /再次點選可取消等待/);
+  assert.doesNotMatch(get('execution-help').textContent, /按快捷鍵可取消/);
   get('execution-start').click();
   assert.equal(sent.at(-1).action, 'run');
-  push(state({ workspace: 'execution', selectedId: '', message: '窗口尺寸与录制时不同，无法执行。' }));
+  push(state({ workspace: 'execution', selectedId: '', message: '視窗尺寸與錄製時不同，無法執行。' }));
   assert.equal(get('execution-view').hidden, false);
-  assert.match(get('execution-message').textContent, /无法执行/);
+  assert.match(get('execution-message').textContent, /無法執行/);
   assert.equal(get('execution-start').disabled, false);
   get('execution-window-select').change('123');
   assert.equal(sent.at(-1).action, 'select');
@@ -473,14 +489,14 @@ test('execution can be requested without manual target selection and displays pe
 test('execution does not expose an unsaved recording draft when no saved script is selected', () => {
   const { get, state, push } = desktop();
   push(state({ workspace: 'execution', savedScripts: [], dirty: true }));
-  assert.equal(get('execution-script-name').textContent, '请选择已保存的脚本');
-  assert.equal(get('execution-step-count').textContent, '0 个步骤');
+  assert.equal(get('execution-script-name').textContent, '請選擇已儲存的腳本');
+  assert.equal(get('execution-step-count').textContent, '0 個步驟');
   assert.equal(get('execution-start').disabled, true);
   assert.equal(get('delete-script').disabled, true);
   assert.equal(get('mode-once').disabled, true);
-  assert.match(get('saved-scripts').children[0].textContent, /结束录制后/);
-  assert.match(get('execution-help').textContent, /选择/);
-  assert.doesNotMatch(get('execution-script-name').textContent, /未保存|未命名/);
+  assert.match(get('saved-scripts').children[0].textContent, /結束錄製後/);
+  assert.match(get('execution-help').textContent, /選擇/);
+  assert.doesNotMatch(get('execution-script-name').textContent, /未儲存|未命名/);
 });
 
 test('switching protects only failed autosaves and deletion requires confirmation', () => {
@@ -490,7 +506,7 @@ test('switching protects only failed autosaves and deletion requires confirmatio
   ui.setConfirm(false);
   get('saved-scripts').children[1].click();
   assert.equal(sent.length, 1);
-  assert.match(confirmations[0], /自动保存失败/);
+  assert.match(confirmations[0], /自動儲存失敗/);
   ui.setConfirm(true);
   get('saved-scripts').children[1].click();
   assert.equal(sent.at(-1).action, 'openScript');
@@ -509,11 +525,11 @@ test('desktop markup has no manual save or new-script control in execution and i
   assert.match(html, /id="mode-continuous"/);
   assert.match(html, /id="recording-window-title"[^>]+list="recording-window-options"/);
   assert.match(html, /id="recording-window-card"/);
-  assert.match(html, /<dialog id="recording-name-dialog"/);
+  assert.match(html, /<dialog[^>]*id="recording-name-dialog"/);
   assert.match(html, /id="recording-name-input"[^>]+maxlength="100"/);
   assert.doesNotMatch(html, /id="save-execution"|id="new-script"|只需三步/);
   const executionMarkup = html.slice(html.indexOf('<div id="execution-view"'));
-  assert.doesNotMatch(executionMarkup, /保存设置|未命名脚本|id="script-name"|id="add-text"/);
+  assert.doesNotMatch(executionMarkup, /儲存設定|未命名腳本|id="script-name"|id="add-text"/);
   assert.equal([...html.matchAll(/\bid="([^"]+)"/g)].length, ids.size, 'HTML IDs remain unique');
 });
 
@@ -524,15 +540,15 @@ test('administrator restart preserves busy recordings and explains elevated fore
   assert.equal(get('restart-admin').hidden, false);
   get('restart-admin').click();
   assert.equal(sent.at(-1).action, 'restartAdmin');
-  for (const update of [{ mode: 'recording', recordingAccessWarning: '前台程序以管理员权限运行' }, { namingRequired: true }]) {
+  for (const update of [{ mode: 'recording', recordingAccessWarning: '前臺程式以管理員許可權執行' }, { namingRequired: true }]) {
     push(state(update));
     const count = sent.length;
     get('restart-admin').click();
     assert.equal(sent.length, count);
   }
-  push(state({ mode: 'recording', recordingAccessWarning: '前台程序以管理员权限运行' }));
+  push(state({ mode: 'recording', recordingAccessWarning: '前臺程式以管理員許可權執行' }));
   assert.equal(get('recording-access-warning').hidden, false);
-  assert.match(get('recording-access-warning').textContent, /管理员/);
+  assert.match(get('recording-access-warning').textContent, /管理員/);
   push(state({ elevated: true }));
   assert.equal(get('restart-admin').hidden, true);
   assert.equal(get('recording-access-warning').hidden, true);
@@ -544,7 +560,7 @@ test('settings page exposes four flow combinations and confirms changes through 
   push(state()); get('nav-settings').click();
   assert.equal(sent.at(-1).value,'settings');
   for(const autoSwitch of [false,true]) for(const returnToApp of [false,true]) {
-    push(state({workspace:'settings',flow:{autoSwitch,returnToApp,targetId:'123',targetTitle:'记事本',message:'已自动保存'}}));
+    push(state({workspace:'settings',flow:{autoSwitch,returnToApp,targetId:'123',targetTitle:'記事本',message:'已自動儲存'}}));
     assert.equal(get('settings-view').hidden,false);
     assert.equal(get('workspace-view').hidden,true);
     assert.equal(get('execution-view').hidden,true);
@@ -552,7 +568,7 @@ test('settings page exposes four flow combinations and confirms changes through 
     assert.equal(get('flow-target-panel').hidden,!autoSwitch);
     assert.equal(get('flow-auto').checked,autoSwitch);
     assert.equal(get('flow-return').checked,returnToApp);
-    assert.ok(get('flow-preview').textContent.includes(returnToApp ? '回到 FlowKey':'保持当前窗口'));
+    assert.ok(get('flow-preview').textContent.includes(returnToApp ? '回到 FlowKey':'保持當前視窗'));
     get('flow-auto').change();
     assert.equal(sent.at(-1).action,'flowSettings');
     assert.equal(sent.at(-1).autoSwitch,autoSwitch);
@@ -560,9 +576,9 @@ test('settings page exposes four flow combinations and confirms changes through 
   }
   get('flow-target').change('123'); assert.equal(sent.at(-1).targetId,'123');
   get('flow-refresh').click(); assert.equal(sent.at(-1).action,'refresh');
-  push(state({workspace:'settings',flow:{autoSwitch:true,returnToApp:false,targetId:'',targetTitle:'旧窗口',message:'保存失败'}}));
+  push(state({workspace:'settings',flow:{autoSwitch:true,returnToApp:false,targetId:'',targetTitle:'舊視窗',message:'儲存失敗'}}));
   assert.match(get('flow-target-note').textContent,/未找到/);
-  assert.equal(get('flow-save-status').textContent,'保存失败');
+  assert.equal(get('flow-save-status').textContent,'儲存失敗');
 });
 
 test('settings cannot interrupt recording, execution, pending start or naming', () => {
@@ -582,9 +598,9 @@ test('settings navigation sits immediately above the local library footer', () =
 });
 test('automatic switching shows pending feedback and supports cancelling instead of asking for manual focus', () => {
   const {get,state,push,sent}=desktop();
-  push(state({workspace:'execution',pendingRun:true,switchingWindow:true,flow:{autoSwitch:true,returnToApp:true,targetTitle:'目标',targetId:'123'}}));
-  assert.match(get('execution-help').textContent,/正在自动切换/);
+  push(state({workspace:'execution',pendingRun:true,switchingWindow:true,flow:{autoSwitch:true,returnToApp:true,targetTitle:'目標',targetId:'123'}}));
+  assert.match(get('execution-help').textContent,/正在自動切換/);
   get('execution-start').click(); assert.equal(sent.at(-1).action,'run');
-  push(state({workspace:'execution',message:'未找到指定窗口「目标」。请先开启该程序。'}));
-  assert.match(get('execution-message').textContent,/未找到指定窗口/);
+  push(state({workspace:'execution',message:'未找到指定視窗「目標」。請先開啟該程式。'}));
+  assert.match(get('execution-message').textContent,/未找到指定視窗/);
 });

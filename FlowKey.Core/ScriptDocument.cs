@@ -6,7 +6,7 @@ public sealed class ScriptDocument
 {
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     [JsonRequired] public int Version { get; set; } = 1;
-    [JsonRequired] public string Name { get; set; } = "我的脚本";
+    [JsonRequired] public string Name { get; set; } = "我的腳本";
     [JsonRequired] public string TargetProcessPath { get; set; } = "";
     [JsonRequired] public string TargetTitle { get; set; } = "";
     [JsonRequired] public string Hotkey { get; set; } = "F10";

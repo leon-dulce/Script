@@ -25,7 +25,7 @@ Console.WriteLine("PASS once, counted and continuous playback with cancellation"
 
 static ScriptDocument ValidScript() => new()
 {
-    Name = "测试", TargetProcessPath = @"C:\Windows\notepad.exe", TargetTitle = "记事本",
+    Name = "測試", TargetProcessPath = @"C:\Windows\notepad.exe", TargetTitle = "記事本",
     ClientWidth = 800, ClientHeight = 600,
     Steps =
     [
@@ -105,15 +105,15 @@ static void CatalogLifecycle()
         Check(catalog.MigrateLegacy(legacy)?.Id == original.Id);
         Check(File.Exists(legacy) && catalog.List().Scripts.Count == 1);
         var second = ValidScript();
-        second.Name = "第二个脚本";
+        second.Name = "第二個腳本";
         second.Execution.Mode = ExecutionMode.Count;
         second.Execution.RepeatCount = 3;
         catalog.Save(second);
         Check(catalog.List().Scripts.Count == 2);
         Check(catalog.Load(second.Id)?.Execution.RepeatCount == 3);
-        second.Name = "更新名称";
+        second.Name = "更新名稱";
         catalog.Save(second);
-        Check(catalog.Load(second.Id)?.Name == "更新名称");
+        Check(catalog.Load(second.Id)?.Name == "更新名稱");
         Check(catalog.MigrateLegacy(legacy) is null);
         Throws(() => catalog.Load("../script.json"));
         File.WriteAllText(Path.Combine(catalog.DirectoryPath, Guid.NewGuid().ToString("N") + ".json"), "{oops");

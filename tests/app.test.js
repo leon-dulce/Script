@@ -19,8 +19,8 @@ test('starts with a reviewable sample script and F10 shortcut', () => {
 
 test('loads a saved script without retaining runtime playback state', () => {
   const saved = {
-    windowName: '浏览器 — 工作台', hotkey: 'F12', mode: 'running',
-    steps: [{ id: 9, type: 'click', title: '点击', detail: '位置', delay: 500 }]
+    windowName: '瀏覽器 — 工作臺', hotkey: 'F12', mode: 'running',
+    steps: [{ id: 9, type: 'click', title: '點選', detail: '位置', delay: 500 }]
   };
   const state = createInitialState(saved);
   assert.equal(state.windowName, saved.windowName);
@@ -31,8 +31,8 @@ test('loads a saved script without retaining runtime playback state', () => {
 
 test('rejects invalid saved steps and restores a safe sample', () => {
   const state = createInitialState({
-    windowName: '浏览器 — 工作台', hotkey: 'F12',
-    steps: [{ id: 1, type: 'bad', title: '错误', detail: '', delay: -1 }]
+    windowName: '瀏覽器 — 工作臺', hotkey: 'F12',
+    steps: [{ id: 1, type: 'bad', title: '錯誤', detail: '', delay: -1 }]
   });
   assert.equal(state.loadedSample, true);
   assert.equal(state.steps.length, 5);

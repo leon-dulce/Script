@@ -18,7 +18,7 @@ public sealed class ScriptStore(string filePath)
         }
         catch (Exception error) when (error is JsonException or InvalidDataException)
         {
-            throw new InvalidDataException("脚本文件损坏或包含无效数据。", error);
+            throw new InvalidDataException("腳本檔案損壞或包含無效資料。", error);
         }
     }
 

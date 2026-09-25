@@ -24,7 +24,7 @@ internal sealed record FlowPreferences
     internal static FlowPreferences Load(string path)
     {
         if (!File.Exists(path)) return new();
-        var value = JsonSerializer.Deserialize<FlowPreferences>(File.ReadAllText(path)) ?? throw new InvalidDataException("设置文件为空。");
+        var value = JsonSerializer.Deserialize<FlowPreferences>(File.ReadAllText(path)) ?? throw new InvalidDataException("設定檔案為空。");
         Validate(value);
         return value;
     }
@@ -46,6 +46,6 @@ internal sealed record FlowPreferences
     {
         if (value.TargetTitle is null || value.TargetProcess is null || value.TargetPath is null ||
             value.TargetTitle.Length > 512 || value.TargetProcess.Length > 256 || value.TargetPath.Length > 32768)
-            throw new InvalidDataException("窗口设置无效。");
+            throw new InvalidDataException("視窗設定無效。");
     }
 }

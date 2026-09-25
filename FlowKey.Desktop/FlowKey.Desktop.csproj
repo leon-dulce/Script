@@ -5,6 +5,7 @@
     <UseWPF>true</UseWPF>
     <PlatformTarget>x64</PlatformTarget>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>../assets/flowkey.ico</ApplicationIcon>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RuntimeIdentifier Condition="'$(Configuration)' == 'Release'">win-x64</RuntimeIdentifier>
@@ -19,5 +20,11 @@
     <EmbeddedResource Include="../index.html" LogicalName="FlowKey.Assets.index.html" />
     <EmbeddedResource Include="../app.js" LogicalName="FlowKey.Assets.app.js" />
     <EmbeddedResource Include="../desktop.js" LogicalName="FlowKey.Assets.desktop.js" />
+    <EmbeddedResource Include="../desktop-ui.css" LogicalName="FlowKey.Assets.desktop-ui.css" />
+    <EmbeddedResource Include="../branding.css" LogicalName="FlowKey.Assets.branding.css" />
+    <EmbeddedResource Include="../assets/flowkey.svg" LogicalName="FlowKey.Assets.assets/flowkey.svg" />
+    <EmbeddedResource Include="../assets/NotoSerifTC.ttf" LogicalName="FlowKey.Assets.assets/NotoSerifTC.ttf" />
+    <EmbeddedResource Include="../assets/OFL-NotoSerifTC.txt" LogicalName="FlowKey.Assets.assets/OFL-NotoSerifTC.txt" />
+    <Resource Include="../assets/flowkey.ico" Link="Assets/flowkey.ico" />
   </ItemGroup>
 </Project>

@@ -1,5 +1,13 @@
 # FlowKey
 
+## 新版介面與圖示
+
+正式版採用 TailAdmin 風格的淺色卡片布局與繁體中文介面。錄製頁集中顯示快捷鍵、開始／停止、動作數及總時長；執行頁包含腳本庫、即時步驟與執行控制；設定入口位於本地腳本庫提示上方。
+
+標題使用內建的 Noto Serif TC，操作文字使用 Windows 正黑體，無需連線下載字型。字型授權隨程式內建，原文見 `assets/OFL-NotoSerifTC.txt`。`assets/flowkey.svg` 為共用標誌來源，`assets/generate_icon.py` 使用 Pillow 產生九種尺寸的 Windows 圖示，供執行檔與視窗使用。
+
+`FlowKey-UI-Demo.html` 是介面預覽，請與 `branding.css` 及 `assets` 資料夾一起保留；正式使用仍請雙擊最上層的 `FlowKey.exe`。
+
 FlowKey 是 Windows 全域键盘脚本录制工具。桌面版使用 .NET 10、WPF、WebView2 和 Win32 API；根目录的 `index.html` 仍可在浏览器中打开，作为不控制电脑的界面演示。
 
 **要启动程序，请双击本资料夹最上层的 [FlowKey.exe](FlowKey.exe)。这就是最新的 Windows 执行档。** `dist/archive` 保存旧版与测试产物，`dist/FlowKey-single` 是建置用目录。

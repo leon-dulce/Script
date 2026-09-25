@@ -15,13 +15,14 @@
   const hasSavedScript = () => state.savedScripts.some(script => script.id === state.script.id);
 
   function executionLabel(plan) {
-    if (plan.mode === 'Count') return `执行 ${plan.repeatCount} 次 · 每轮间隔 ${plan.intervalMs} 毫秒`;
-    if (plan.mode === 'Continuous') return `持续执行 · 每轮间隔 ${plan.intervalMs} 毫秒`;
-    return '只执行一次';
+    if (plan.mode === 'Count') return `執行 ${plan.repeatCount} 次 · 每輪間隔 ${plan.intervalMs} 毫秒`;
+    if (plan.mode === 'Continuous') return `持續執行 · 每輪間隔 ${plan.intervalMs} 毫秒`;
+    return '只執行一次';
   }
 
   function showView(next) {
     view = next;
+    $('workspace-breadcrumb').textContent = { editor: '錄製與編輯', execution: '執行腳本', settings: '設定' }[next];
     $('workspace-view').hidden = next !== 'editor';
     $('execution-view').hidden = next !== 'execution';
     $('settings-view').hidden = next !== 'settings';
@@ -41,7 +42,7 @@
   }
 
   function renderFlowSettings() {
-    const flow = state.flow || { autoSwitch: false, returnToApp: false, targetId: '', targetTitle: '', message: '修改后自动保存，适用于所有脚本。' };
+    const flow = state.flow || { autoSwitch: false, returnToApp: false, targetId: '', targetTitle: '', message: '修改後自動儲存，適用於所有腳本。' };
     $('flow-auto').checked = flow.autoSwitch;
     $('flow-manual').checked = !flow.autoSwitch;
     $('flow-return').checked = flow.returnToApp;
@@ -50,11 +51,11 @@
     $('flow-target-panel').hidden = !flow.autoSwitch;
     const picker = $('flow-target');
     picker.replaceChildren();
-    const empty = document.createElement('option'); empty.value = ''; empty.textContent = '请选择已打开的窗口'; picker.append(empty);
+    const empty = document.createElement('option'); empty.value = ''; empty.textContent = '請選擇已開啟的視窗'; picker.append(empty);
     for (const item of state.windows) { const option = document.createElement('option'); option.value = item.id; option.textContent = item.process + ' · ' + item.title; picker.append(option); }
     picker.value = flow.targetId;
-    $('flow-target-note').textContent = flow.targetTitle && !flow.targetId ? '上次选择：' + flow.targetTitle + '。窗口未找到或有重名，请刷新后选择。' : '记住窗口名称与程序；程序重新打开后会尝试重新匹配。';
-    $('flow-preview').textContent = '开始执行 → ' + (flow.autoSwitch ? '自动切到' + (flow.targetTitle || '指定窗口（待选择）') : '等待你切到目标窗口') + ' → 运行脚本 → ' + (flow.returnToApp ? '回到 FlowKey' : '保持当前窗口');
+    $('flow-target-note').textContent = flow.targetTitle && !flow.targetId ? '上次選擇：' + flow.targetTitle + '。視窗未找到或有重名，請重新整理後選擇。' : '記住視窗名稱與程式；程式重新開啟後會嘗試重新匹配。';
+    $('flow-preview').textContent = '開始執行 → ' + (flow.autoSwitch ? '自動切到' + (flow.targetTitle || '指定視窗（待選擇）') : '等待你切到目標視窗') + ' → 執行腳本 → ' + (flow.returnToApp ? '回到 FlowKey' : '保持當前視窗');
     $('flow-save-status').textContent = flow.message;
   }
 
@@ -72,7 +73,7 @@
     if (!state.savedScripts.length) {
       const empty = document.createElement('div');
       empty.className = 'library-empty';
-      empty.textContent = '尚无已保存脚本。结束录制后，为脚本命名并确认保存，就会出现在这里。';
+      empty.textContent = '尚無已儲存腳本。結束錄製後，為腳本命名並確認儲存，就會出現在這裡。';
       library.append(empty);
     }
     state.savedScripts.forEach(script => {
@@ -84,11 +85,11 @@
       const title = document.createElement('strong');
       title.textContent = script.name;
       const detail = document.createElement('small');
-      detail.textContent = `${script.stepCount} 个步骤 · ${script.mode === 'Continuous' ? '持续' : script.mode === 'Count' ? '指定次数' : '单次'}`;
+      detail.textContent = `${script.stepCount} 個步驟 · ${script.mode === 'Continuous' ? '持續' : script.mode === 'Count' ? '指定次數' : '單次'}`;
       button.append(title, detail);
       button.addEventListener('click', () => {
         if (view === 'execution' && !isBusy() && script.id !== state.script.id &&
-            (!state.dirty || window.confirm('上次自动保存失败。确定切换脚本并放弃尚未保存的修改吗？')))
+            (!state.dirty || window.confirm('上次自動儲存失敗。確定切換腳本並放棄尚未儲存的修改嗎？')))
           send('openScript', { id: script.id });
       });
       library.append(button);
@@ -101,13 +102,13 @@
     const saved = hasSavedScript();
     const settingsDisabled = isBusy() || !saved;
     $('plan-summary').textContent = executionLabel(plan);
-    $('execution-script-name').textContent = saved ? state.script.name : '请选择已保存的脚本';
-    $('execution-target').textContent = selected ? `${selected.process} · ${selected.title} · 已确认` : '在目标窗口按快捷键，即可确认窗口并执行';
+    $('execution-script-name').textContent = saved ? state.script.name : '請選擇已儲存的腳本';
+    $('execution-target').textContent = selected ? `${selected.process} · ${selected.title} · 已確認` : '在目標視窗按快捷鍵，即可確認視窗並執行';
     const targetSelect = $('execution-window-select');
     targetSelect.replaceChildren();
     const placeholder = document.createElement('option');
     placeholder.value = '';
-    placeholder.textContent = '自动使用快捷键所在窗口';
+    placeholder.textContent = '自動使用快捷鍵所在視窗';
     targetSelect.append(placeholder);
     state.windows.forEach(item => {
       const option = document.createElement('option');
@@ -129,42 +130,42 @@
     $('repeat-count').disabled = plan.mode !== 'Count' || settingsDisabled;
     $('repeat-interval').value = String(plan.intervalMs);
     $('repeat-interval').disabled = plan.mode === 'Once' || settingsDisabled;
-    $('execution-description').textContent = !saved ? '从左侧选择一个已保存脚本，即可设置运行方式。' : plan.mode === 'Once'
-      ? '脚本将从第一步到最后一步执行一次。'
+    $('execution-description').textContent = !saved ? '從左側選擇一個已儲存腳本，即可設定執行方式。' : plan.mode === 'Once'
+      ? '腳本將從第一步到最後一步執行一次。'
       : plan.mode === 'Count'
-        ? `脚本将执行 ${plan.repeatCount} 轮；每轮完成后等待 ${plan.intervalMs} 毫秒，再开始下一轮。`
-        : `脚本将持续循环；每轮完成后等待 ${plan.intervalMs} 毫秒。再次按 ${state.script.hotkey} 可停止。`;
+        ? `腳本將執行 ${plan.repeatCount} 輪；每輪完成後等待 ${plan.intervalMs} 毫秒，再開始下一輪。`
+        : `腳本將持續迴圈；每輪完成後等待 ${plan.intervalMs} 毫秒。再次按 ${state.script.hotkey} 可停止。`;
     $('execution-hotkey').value = state.script.hotkey;
     $('execution-hotkey').disabled = settingsDisabled;
     const active = state.mode === 'running' || state.pendingRun;
     $('execution-start').disabled = !active && (isBusy() || !saved || !state.script.steps.length);
-    $('execution-start').textContent = active ? '■ 停止执行' : '▶ 开始执行';
+    $('execution-start').textContent = active ? '■ 停止執行' : '▶ 開始執行';
     $('execution-start').className = `button ${active ? 'danger' : 'primary'}`;
     $('execution-help').textContent = state.pendingRun
-      ? (state.switchingWindow ? '正在自动切换窗口，就绪后开始；再次点击可取消。' : '已准备执行，切回目标窗口后开始；再次点击可取消等待。')
-      : state.mode === 'running' ? `再按 ${state.script.hotkey} 可停止执行。`
-        : !saved ? '请从左侧选择要执行的已保存脚本。'
-          : !state.script.steps.length ? '此脚本没有可执行的步骤。'
-            : `在目标窗口按 ${state.script.hotkey} 开始执行；再次按下停止。也可点击「开始执行」后切回目标窗口。`;
+      ? (state.switchingWindow ? '正在自動切換視窗，就緒後開始；再次點選可取消。' : '已準備執行，切回目標視窗後開始；再次點選可取消等待。')
+      : state.mode === 'running' ? `再按 ${state.script.hotkey} 可停止執行。`
+        : !saved ? '請從左側選擇要執行的已儲存腳本。'
+          : !state.script.steps.length ? '此腳本沒有可執行的步驟。'
+            : `在目標視窗按 ${state.script.hotkey} 開始執行；再次按下停止。也可點選「開始執行」後切回目標視窗。`;
     $('cycle-number').textContent = state.mode === 'running'
-      ? `${state.currentIteration}${plan.mode === 'Count' ? ` / ${plan.repeatCount}` : ''}${state.waitingForNextRun ? ' · 等待下一轮' : ''}`
+      ? `${state.currentIteration}${plan.mode === 'Count' ? ` / ${plan.repeatCount}` : ''}${state.waitingForNextRun ? ' · 等待下一輪' : ''}`
       : '—';
-    $('execution-progress-label').textContent = state.waitingForNextRun ? '等待下一轮' : state.mode === 'running' ? '执行中' : state.pendingRun ? '等待目标窗口' : '准备就绪';
+    $('execution-progress-label').textContent = state.waitingForNextRun ? '等待下一輪' : state.mode === 'running' ? '執行中' : state.pendingRun ? '等待目標視窗' : '準備就緒';
     const current = state.mode === 'running' && !state.waitingForNextRun ? state.currentStep + 1 : 0;
     const steps = saved ? state.script.steps : [];
     $('execution-progress-fraction').textContent = `${current} / ${steps.length}`;
     $('execution-progress-fill').style.width = steps.length ? `${current * 100 / steps.length}%` : '0%';
-    $('execution-step-count').textContent = `${steps.length} 个步骤`;
+    $('execution-step-count').textContent = `${steps.length} 個步驟`;
     const activeStep = state.mode === 'running' && !state.waitingForNextRun ? steps[state.currentStep] : null;
-    $('execution-current-action').textContent = !saved ? '等待选择脚本'
-      : state.waitingForNextRun ? `第 ${state.currentIteration} 轮已完成，等待 ${plan.intervalMs} 毫秒后继续`
+    $('execution-current-action').textContent = !saved ? '等待選擇腳本'
+      : state.waitingForNextRun ? `第 ${state.currentIteration} 輪已完成，等待 ${plan.intervalMs} 毫秒後繼續`
         : activeStep ? `第 ${state.currentStep + 1} 步 · ${stepLabel(activeStep).join('：')}`
-          : state.pendingRun ? '等待目标窗口进入前台'
-            : state.mode === 'running' ? '正在开始执行'
-              : '等待执行，启动后会自动跟随当前步骤';
+          : state.pendingRun ? '等待目標視窗進入前臺'
+            : state.mode === 'running' ? '正在開始執行'
+              : '等待執行，啟動後會自動跟隨當前步驟';
     if (state.flow?.autoSwitch) {
-      $('execution-target').textContent = '自动切换目标：' + (state.flow.targetTitle || '请先到设置页选择窗口');
-      if (!active) $('execution-help').textContent = '开始后自动切换到指定窗口；结束后' + (state.flow.returnToApp ? '返回 FlowKey。' : '保持当前窗口。');
+      $('execution-target').textContent = '自動切換目標：' + (state.flow.targetTitle || '請先到設定頁選擇視窗');
+      if (!active) $('execution-help').textContent = '開始後自動切換到指定視窗；結束後' + (state.flow.returnToApp ? '返回 FlowKey。' : '保持當前視窗。');
     }
     renderSteps('execution-steps', steps, false);
   }
@@ -176,7 +177,7 @@
     const intervalMs = Number($('repeat-interval').value);
     if (!mode || !Number.isInteger(count) || count < 1 || count > 10000 ||
         !Number.isInteger(intervalMs) || intervalMs < 100 || intervalMs > 60000) {
-      window.alert('执行次数须为 1–10000，轮次间隔须为 100–60000 毫秒。');
+      window.alert('執行次數須為 1–10000，輪次間隔須為 100–60000 毫秒。');
       return;
     }
     send('execution', { mode, count, intervalMs });
@@ -195,10 +196,10 @@
       106: 'Numpad *', 107: 'Numpad +', 108: 'Numpad 分隔符', 109: 'Numpad -',
       110: 'Numpad .', 111: 'Numpad /', 144: 'Num Lock', 145: 'Scroll Lock',
       160: '左 Shift', 161: '右 Shift', 162: '左 Ctrl', 163: '右 Ctrl', 164: '左 Alt', 165: '右 Alt',
-      166: '浏览器后退', 167: '浏览器前进', 168: '浏览器刷新', 169: '浏览器停止',
-      170: '浏览器搜索', 171: '浏览器收藏', 172: '浏览器主页',
-      173: '静音', 174: '降低音量', 175: '提高音量', 176: '下一曲', 177: '上一曲',
-      178: '停止媒体', 179: '播放 / 暂停', 180: '邮件', 181: '媒体', 182: '应用 1', 183: '应用 2',
+      166: '瀏覽器後退', 167: '瀏覽器前進', 168: '瀏覽器重新整理', 169: '瀏覽器停止',
+      170: '瀏覽器搜尋', 171: '瀏覽器收藏', 172: '瀏覽器主頁',
+      173: '靜音', 174: '降低音量', 175: '提高音量', 176: '下一曲', 177: '上一曲',
+      178: '停止媒體', 179: '播放 / 暫停', 180: '郵件', 181: '媒體', 182: '應用 1', 183: '應用 2',
       186: '; / :', 187: '= / +', 188: ', / <', 189: '- / _', 190: '. / >', 191: '/ / ?',
       192: '` / ~', 219: '[ / {', 220: '\\ / |', 221: '] / }', 222: "' / \"", 226: 'OEM 102',
       229: 'IME Process', 231: 'Unicode Packet', 246: 'Attn', 247: 'CrSel', 248: 'ExSel',
@@ -208,17 +209,17 @@
     if ((key >= 48 && key <= 57) || (key >= 65 && key <= 90)) return String.fromCharCode(key);
     if (key >= 96 && key <= 105) return `Numpad ${key - 96}`;
     if (key >= 112 && key <= 135) return `F${key - 111}`;
-    return `按键 0x${key.toString(16).toUpperCase().padStart(2, '0')}`;
+    return `按鍵 0x${key.toString(16).toUpperCase().padStart(2, '0')}`;
   }
 
   function stepLabel(step) {
     switch (step.type) {
-      case 'Click': return ['点击', `${step.button} · (${step.x}, ${step.y})`];
-      case 'DoubleClick': return ['双击', `${step.button} · (${step.x}, ${step.y})`];
-      case 'Scroll': return ['滚动', `${step.wheelDelta > 0 ? '向上' : '向下'} ${Math.abs(step.wheelDelta)} 格`];
-      case 'Key': return [step.keyAction === 'Down' ? '按下按键' : step.keyAction === 'Up' ? '松开按键' : '按键', step.keys.map(keyName).join(' + ')];
-      case 'Text': return ['输入文字', step.text];
-      default: return ['未知步骤', ''];
+      case 'Click': return ['點選', `${step.button} · (${step.x}, ${step.y})`];
+      case 'DoubleClick': return ['雙擊', `${step.button} · (${step.x}, ${step.y})`];
+      case 'Scroll': return ['滾動', `${step.wheelDelta > 0 ? '向上' : '向下'} ${Math.abs(step.wheelDelta)} 格`];
+      case 'Key': return [step.keyAction === 'Down' ? '按下按鍵' : step.keyAction === 'Up' ? '鬆開按鍵' : '按鍵', step.keys.map(keyName).join(' + ')];
+      case 'Text': return ['輸入文字', step.text];
+      default: return ['未知步驟', ''];
     }
   }
 
@@ -228,7 +229,7 @@
     if (!steps.length) {
       const empty = document.createElement('div');
       empty.className = 'empty';
-      empty.textContent = editable ? '按快捷键或「开始录制」后，可切换到其他窗口。每次按下、松开按键与间隔都会即时显示。' : '从左侧选择一个已保存脚本，查看完整执行步骤。';
+      empty.textContent = editable ? '按快捷鍵或「開始錄製」後，可切換到其他視窗。每次按下、鬆開按鍵與間隔都會即時顯示。' : '從左側選擇一個已儲存腳本，檢視完整執行步驟。';
       container.appendChild(empty);
     }
     steps.forEach((step, index) => {
@@ -252,7 +253,7 @@
       if (!editable) {
         const delay = document.createElement('span');
         delay.className = 'execution-delay';
-        delay.textContent = `间隔 ${step.delayMs} 毫秒`;
+        delay.textContent = `間隔 ${step.delayMs} 毫秒`;
         row.append(delay);
         container.append(row);
         const highlightKey = `${state.script.id}:${state.currentIteration}:${index}`;
@@ -266,7 +267,7 @@
       controls.className = 'step-tools';
       const interval = document.createElement('span');
       interval.className = 'step-interval';
-      interval.textContent = `间隔 ${step.delayMs} 毫秒`;
+      interval.textContent = `間隔 ${step.delayMs} 毫秒`;
       controls.append(interval);
       const delay = document.createElement('input');
       delay.type = 'number';
@@ -276,14 +277,14 @@
       delay.value = String(step.delayMs);
       delay.className = 'delay';
       delay.style.width = '74px';
-      delay.title = '执行前等待毫秒数';
-      delay.setAttribute('aria-label', `步骤 ${index + 1} 的等待毫秒数`);
+      delay.title = '執行前等待毫秒數';
+      delay.setAttribute('aria-label', `步驟 ${index + 1} 的等待毫秒數`);
       delay.disabled = isBusy();
       delay.hidden = isBusy();
       delay.addEventListener('change', () => {
         const value = Number(delay.value);
         if (!delay.value.trim() || !Number.isInteger(value) || value < 0 || value > 2147483647) {
-          window.alert('步骤间隔须为 0–2147483647 毫秒的整数。');
+          window.alert('步驟間隔須為 0–2147483647 毫秒的整數。');
           delay.value = String(step.delayMs);
           return;
         }
@@ -294,11 +295,11 @@
         const edit = document.createElement('button');
         edit.className = 'step-delete';
         edit.textContent = '✎';
-        edit.title = '编辑文字';
+        edit.title = '編輯文字';
         edit.disabled = isBusy();
         edit.hidden = isBusy();
         edit.addEventListener('click', () => {
-          const value = window.prompt('编辑输入文字步骤', step.text);
+          const value = window.prompt('編輯輸入文字步驟', step.text);
           if (value) send('text', { index, value });
         });
         controls.append(edit);
@@ -306,7 +307,7 @@
       const remove = document.createElement('button');
       remove.className = 'step-delete';
       remove.textContent = '×';
-      remove.title = '删除步骤';
+      remove.title = '刪除步驟';
       remove.disabled = isBusy();
       remove.hidden = isBusy();
       remove.addEventListener('click', () => send('delete', { index }));
@@ -342,7 +343,7 @@
     if (!state?.namingRequired) return;
     const name = $('recording-name-input').value.trim();
     if (!name || name.length > 100) {
-      $('recording-name-error').textContent = !name ? '请输入脚本名称。' : '脚本名称不可超过 100 个字符。';
+      $('recording-name-error').textContent = !name ? '請輸入腳本名稱。' : '腳本名稱不可超過 100 個字元。';
       return;
     }
     $('recording-name-error').textContent = '';
@@ -356,7 +357,7 @@
     select.replaceChildren();
     const placeholder = document.createElement('option');
     placeholder.value = '';
-    placeholder.textContent = '选择窗口';
+    placeholder.textContent = '選擇視窗';
     select.append(placeholder);
     state.windows.forEach(item => {
       const option = document.createElement('option');
@@ -374,7 +375,7 @@
     $('nav-settings').disabled = isBusy();
     renderFlowSettings();
     $('nav-execution').disabled = isBusy();
-    $('status-text').textContent = state.namingRequired ? '录制结束，等待命名保存' : ({ ready: '就绪，等待操作', recording: '正在录制', paused: '录制已暂停', running: '正在执行脚本' })[state.mode] || '错误';
+    $('status-text').textContent = state.namingRequired ? '錄製結束，等待命名儲存' : ({ ready: '就緒，等待操作', recording: '正在錄製', paused: '錄製已暫停', running: '正在執行腳本' })[state.mode] || '錯誤';
     $('status-hint').textContent = state.message;
     $('restart-admin').hidden = !!state.elevated;
     $('restart-admin').disabled = isBusy();
@@ -384,13 +385,15 @@
     $('status-dot').className = `pulse${state.mode === 'recording' ? ' recording' : state.mode === 'running' ? ' running' : ''}`;
     $('add-text').disabled = true;
     $('record-button').disabled = state.namingRequired || state.workspace !== 'editor' || state.mode === 'running';
-    $('record-button').querySelector('span').textContent = state.mode === 'recording' ? '停止录制' : '开始录制';
+    $('record-button').querySelector('span').textContent = state.mode === 'recording' ? '停止錄製' : '開始錄製';
     document.querySelector('.help').textContent = state.mode === 'recording'
-      ? `再次按 ${state.script.hotkey} 结束录制，然后为脚本命名并确认保存。`
-      : state.namingRequired ? '录制已结束，请在对话框输入脚本名称并确认保存。'
-        : state.mode === 'paused' ? `录制已暂停。按 ${state.script.hotkey} 结束，然后为脚本命名保存。`
-          : `设置快捷键后，按 ${state.script.hotkey} 或点击「开始录制」。切换窗口会继续记录，再按一次结束并命名保存。`;
-    $('step-count').textContent = `${state.script.steps.length} 个步骤`;
+      ? `再次按 ${state.script.hotkey} 結束錄製，然後為腳本命名並確認儲存。`
+      : state.namingRequired ? '錄製已結束，請在對話方塊輸入腳本名稱並確認儲存。'
+        : state.mode === 'paused' ? `錄製已暫停。按 ${state.script.hotkey} 結束，然後為腳本命名儲存。`
+          : `設定快捷鍵後，按 ${state.script.hotkey} 或點選「開始錄製」。切換視窗會繼續記錄，再按一次結束並命名儲存。`;
+    $('step-count').textContent = `${state.script.steps.length} 個步驟`;
+    $('record-total').textContent = String(state.script.steps.length);
+    $('record-seconds').textContent = (state.script.steps.reduce((sum, step) => sum + step.delayMs, 0) / 1000).toFixed(1);
     renderSteps('steps', state.script.steps, true);
     renderLibrary();
     renderExecution(selected);
@@ -409,17 +412,17 @@
       'window-select', 'script-name-row', 'plan-summary', 'open-execution', 'add-step',
       'run-button', 'recording-progress', 'finish-button', 'recording-target-config', 'recording-window-card', 'add-text']) $(id).hidden = true;
     $('record-button').hidden = false;
-    $('target-title').textContent = '录制状态';
-    document.querySelector('.card-label').textContent = '01 / 状态';
-    $('recording-subtitle').textContent = '设置快捷键或点击开始录制，自由切换窗口，实时记录每个按键与间隔。';
-    $('recording-target-note').textContent = '跨窗口持续录制键盘动作';
-    $('run-title').textContent = '录制快捷键';
-    $('hotkey-select').setAttribute('aria-label', '设置录制开始与结束快捷键');
-    $('recording-shortcut-note').textContent = '按一次开始，再按一次结束并命名';
-    document.querySelector('.demo-badge').textContent = 'DESKTOP APP';
-    document.querySelector('.sidebar-bottom').innerHTML = '<strong><span class="dot"></span>本地脚本库</strong>结束录制后，为脚本命名并确认保存，即可在执行页使用。';
-    document.querySelector('.footer-note').textContent = '脚本仅在选定窗口位于前台且尺寸一致时执行。';
-    document.querySelector('.help').textContent = '按快捷键或开始录制按钮开始，再按一次结束并命名保存。';
+    $('target-title').textContent = '錄製狀態';
+    document.querySelector('.card-label').textContent = '01 / 狀態';
+    $('recording-subtitle').textContent = '設定快捷鍵或點選開始錄製，自由切換視窗，即時記錄每個按鍵與間隔。';
+    $('recording-target-note').textContent = '跨視窗持續錄製鍵盤動作';
+    $('run-title').textContent = '按住一次，記錄一次';
+    $('hotkey-select').setAttribute('aria-label', '設定錄製開始與結束快捷鍵');
+    $('recording-shortcut-note').textContent = '按一次開始，再按一次結束並命名';
+    document.querySelector('.demo-badge').textContent = '本機應用程式';
+    document.querySelector('.sidebar-bottom').innerHTML = '<strong><span class="dot"></span>本地腳本庫</strong>結束錄製後，為腳本命名並確認儲存，即可在執行頁使用。';
+    document.querySelector('.footer-note').textContent = '腳本與設定儲存於本機。執行中可再次按快捷鍵停止。';
+    document.querySelector('.help').textContent = '按快捷鍵或開始錄製按鈕開始，再按一次結束並命名儲存。';
     $('hotkey-select').replaceChildren(...['F8', 'F9', 'F10', 'F11'].map(key => {
       const option = document.createElement('option'); option.value = key; option.textContent = key; return option;
     }));
@@ -436,7 +439,7 @@
     $('flow-target').addEventListener('change', () => submitFlowSettings(true));
     $('flow-refresh').addEventListener('click', () => { if (!isBusy()) send('refresh'); });
     $('delete-script').addEventListener('click', () => {
-      if (view === 'execution' && !isBusy() && hasSavedScript() && window.confirm(`确定删除「${state.script.name}」吗？此操作无法恢复。`))
+      if (view === 'execution' && !isBusy() && hasSavedScript() && window.confirm(`確定刪除「${state.script.name}」嗎？此操作無法恢復。`))
         send('deleteScript', { id: state.script.id });
     });
     for (const id of ['mode-once', 'mode-count', 'mode-continuous', 'repeat-count', 'repeat-interval'])
@@ -448,7 +451,7 @@
       if (event.key === 'Enter') { event.preventDefault(); saveRecording(); }
     });
     $('recording-name-discard').addEventListener('click', () => {
-      if (state?.namingRequired && window.confirm('确定放弃本次录制吗？本次录制的步骤将不会保存。')) send('discardRecording');
+      if (state?.namingRequired && window.confirm('確定放棄本次錄製嗎？本次錄製的步驟將不會儲存。')) send('discardRecording');
     });
     window.chrome.webview.addEventListener('message', event => { state = event.data; render(); });
     showView('editor');

@@ -111,7 +111,7 @@ internal static class Native
     internal static void SendKey(ushort key, bool release = false, bool unicode = false, nint layout = 0)
     {
         var input = CreateKeyInput(key, release, unicode, layout);
-        if (SendInput(1, [input], Marshal.SizeOf<Input>()) != 1) throw new Win32Exception("无法向目标窗口发送按键。请确认窗口没有更高权限。");
+        if (SendInput(1, [input], Marshal.SizeOf<Input>()) != 1) throw new Win32Exception("無法向目標視窗傳送按鍵。請確認視窗沒有更高許可權。");
     }
 
     internal static Input CreateKeyInput(ushort key, bool release = false, bool unicode = false, nint layout = 0)
@@ -139,6 +139,6 @@ internal static class Native
     internal static void SendMouse(uint flags, uint data = 0)
     {
         var input = new Input { Type = 0, Mouse = new MouseInput { Flags = flags, MouseData = data } };
-        if (SendInput(1, [input], Marshal.SizeOf<Input>()) != 1) throw new Win32Exception("无法向目标窗口发送鼠标操作。请确认窗口没有更高权限。");
+        if (SendInput(1, [input], Marshal.SizeOf<Input>()) != 1) throw new Win32Exception("無法向目標視窗傳送滑鼠操作。請確認視窗沒有更高許可權。");
     }
 }

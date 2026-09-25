@@ -61,6 +61,7 @@ internal static class DesktopE2E
         {
             app.Show();
             Until(() => loaded, "embedded interface did not load", 30000);
+            VerifyAppearance(app);
             target.Show();
             _keyboardTarget = new WindowInteropHelper(target).Handle;
             AcquireInitialTargetFocus(target, editor);
@@ -83,7 +84,7 @@ internal static class DesktopE2E
 
             ActivateWindow(app);
             Eval(app, "document.getElementById('record-button').click()");
-            Until(() => Text(app, "status-text") == "正在录制", "button did not start global recording");
+            Until(() => Text(app, "status-text") == "正在錄製", "button did not start global recording");
             ActivateTarget(target, editor);
             AddTestRecordedText(app, "X");
             AddTestRecordedText(app, "Y");
@@ -119,13 +120,13 @@ internal static class DesktopE2E
 
             ActivateTarget(target, editor);
             PressHotkey(hotkey);
-            Until(() => Text(app, "status-text") == "正在录制" && Text(app, "step-count") == "0 个步骤",
+            Until(() => Text(app, "status-text") == "正在錄製" && Text(app, "step-count") == "0 個步驟",
                 "second recording did not begin a fresh script");
             PumpFor(100);
             SendTestKey(app, 0x5A);
             PumpFor(90);
             ActivateWindow(app);
-            if (Text(app, "status-text") != "正在录制") throw new Exception("Switching to app paused recording.");
+            if (Text(app, "status-text") != "正在錄製") throw new Exception("Switching to app paused recording.");
             SendTestKey(app, 0x5A);
             PumpFor(90);
             ActivateTarget(target, editor);
@@ -143,16 +144,16 @@ internal static class DesktopE2E
                 throw new Exception("Keyboard actions or their elapsed delays were not preserved.");
             Until(() => EvalBool(app, "document.querySelectorAll('#steps .step').length===4"),
                 "the recording screen did not show every captured key event while recording");
-            if (Text(app, "status-text") != "正在录制" ||
+            if (Text(app, "status-text") != "正在錄製" ||
                 EvalString(app, "Array.from(document.querySelectorAll('#steps .step-copy strong'),e=>e.textContent).join('|')") !=
-                    "按下按键|松开按键|按下按键|松开按键" ||
+                    "按下按鍵|鬆開按鍵|按下按鍵|鬆開按鍵" ||
                 EvalString(app, "Array.from(document.querySelectorAll('#steps .step-interval'),e=>e.textContent).join('|')") !=
-                    string.Join("|", CurrentScript(app).Steps.Select(s => $"间隔 {s.DelayMs} 毫秒")))
-                throw new Exception("Live keyboard mismatch: " + Text(app, "status-text") + " labels=" + EvalString(app, "Array.from(document.querySelectorAll('#steps .step-copy strong'),e=>e.textContent).join('|')") + " intervals=" + EvalString(app, "Array.from(document.querySelectorAll('#steps .step-interval'),e=>e.textContent).join('|')") + " expected=" + string.Join("|", CurrentScript(app).Steps.Select(s => $"间隔 {s.DelayMs} 毫秒")));
+                    string.Join("|", CurrentScript(app).Steps.Select(s => $"間隔 {s.DelayMs} 毫秒")))
+                throw new Exception("Live keyboard mismatch: " + Text(app, "status-text") + " labels=" + EvalString(app, "Array.from(document.querySelectorAll('#steps .step-copy strong'),e=>e.textContent).join('|')") + " intervals=" + EvalString(app, "Array.from(document.querySelectorAll('#steps .step-interval'),e=>e.textContent).join('|')") + " expected=" + string.Join("|", CurrentScript(app).Steps.Select(s => $"間隔 {s.DelayMs} 毫秒")));
             var secondId = CurrentScript(app).Id;
             ActivateWindow(app);
             PumpFor(150);
-            if (Text(app, "status-text") != "正在录制") throw new Exception("Global recording paused on focus change.");
+            if (Text(app, "status-text") != "正在錄製") throw new Exception("Global recording paused on focus change.");
             PressShortcutInWindow(hotkey, new WindowInteropHelper(app).Handle);
             WaitForNaming(app);
             if (catalog.List().Scripts.Count != 1) throw new Exception("Paused recording saved without naming confirmation.");
@@ -178,9 +179,9 @@ internal static class DesktopE2E
 
             ActivateTarget(target, editor);
             PressHotkey(hotkey);
-            Until(() => Text(app, "status-text") == "正在录制", "empty recording did not start");
+            Until(() => Text(app, "status-text") == "正在錄製", "empty recording did not start");
             Eval(app, "document.getElementById('record-button').click()");
-            Until(() => Text(app, "status-text") == "就绪，等待操作", "empty recording did not finish");
+            Until(() => Text(app, "status-text") == "就緒，等待操作", "empty recording did not finish");
             if (catalog.List().Scripts.Count != 2 || EvalBool(app, "document.getElementById('recording-name-dialog').open"))
                 throw new Exception("An empty recording created a saved script or requested a name.");
             if (!EvalBool(app, "document.getElementById('add-text').disabled"))
@@ -215,7 +216,7 @@ internal static class DesktopE2E
                 Text(app, "execution-current-action").Contains("Y"), "execution did not follow its second step");
             Until(() => Text(app, "execution-current-action").Contains("等待 250 毫秒"), "execution did not display the interval between rounds");
             Until(() => editor.Text == "XYXYXY", "count mode did not run three complete rounds", 12000);
-            Until(() => Text(app, "status-text") == "就绪，等待操作", "count mode did not finish");
+            Until(() => Text(app, "status-text") == "就緒，等待操作", "count mode did not finish");
             if (!EvalBool(app, "!document.getElementById('execution-view').hidden"))
                 throw new Exception("Starting execution returned to the recording workspace.");
             if (EvalBool(app, "!!document.querySelector('#execution-steps [aria-current=step]')"))
@@ -227,7 +228,7 @@ internal static class DesktopE2E
             PressHotkey(hotkey);
             Until(() => editor.Text.Length >= 10, "continuous mode did not repeat", 10000);
             PressHotkey(hotkey);
-            Until(() => Text(app, "status-text") == "就绪，等待操作", "hotkey did not stop continuous execution");
+            Until(() => Text(app, "status-text") == "就緒，等待操作", "hotkey did not stop continuous execution");
             var stoppedLength = editor.Text.Length;
             PumpFor(1400);
             if (editor.Text.Length != stoppedLength) throw new Exception("Continuous execution continued after stop.");
@@ -236,22 +237,22 @@ internal static class DesktopE2E
             SetPlan(app, "Once", 3, 250);
             ActivateWindow(app);
             Eval(app, "document.getElementById('execution-start').click()");
-            Until(() => Text(app, "execution-progress-label") == "等待目标窗口", "start button did not wait for the target window");
+            Until(() => Text(app, "execution-progress-label") == "等待目標視窗", "start button did not wait for the target window");
             ActivateTarget(target, editor);
             Until(() => editor.Text.Length == stoppedLength + 2, "once mode did not execute exactly once", 10000);
-            Until(() => Text(app, "status-text") == "就绪，等待操作", "once mode did not finish");
+            Until(() => Text(app, "status-text") == "就緒，等待操作", "once mode did not finish");
             PumpFor(1400);
             if (editor.Text.Length != stoppedLength + 2 || !editor.Text.EndsWith("XY")) throw new Exception("Once mode repeated unexpectedly.");
             Console.WriteLine("PASS Windows UI: start button waits for target focus and executes exactly once");
 
             OpenLibraryScript(app, catalog, secondId);
-            Until(() => Text(app, "execution-step-count") == "4 个步骤" && Text(app, "execution-steps").Contains("Z"),
+            Until(() => Text(app, "execution-step-count") == "4 個步驟" && Text(app, "execution-steps").Contains("Z"),
                 "selecting another saved script did not replace the execution steps");
             hotkey = catalog.Load(secondId)!.Hotkey;
             var conflictingHotkey = "F" + (otherFunctionKey - 0x70 + 1);
             Eval(app, "document.getElementById('execution-hotkey').value='" + conflictingHotkey +
                 "';document.getElementById('execution-hotkey').dispatchEvent(new Event('change'))");
-            Until(() => Text(app, "execution-message").Contains("已出现在脚本步骤"),
+            Until(() => Text(app, "execution-message").Contains("已出現在腳本步驟"),
                 "a shortcut already recorded in the script was not rejected");
             if (CurrentScript(app).Hotkey != hotkey || catalog.Load(secondId)!.Hotkey != hotkey ||
                 EvalString(app, "document.getElementById('execution-hotkey').value") != hotkey)
@@ -262,7 +263,7 @@ internal static class DesktopE2E
             keyEvents.Clear();
             ActivateTarget(target, editor);
             PressHotkey(hotkey);
-            Until(() => RelevantKeys().Length >= 4 && Text(app, "status-text") == "就绪，等待操作",
+            Until(() => RelevantKeys().Length >= 4 && Text(app, "status-text") == "就緒，等待操作",
                 "recorded key actions did not replay as actual Windows key-down and key-up events");
             if (!RelevantKeys().SequenceEqual(new[] { (Key.Z, false), (Key.Z, true), (functionKey, false), (functionKey, true) }))
                 throw new Exception("Windows key replay did not preserve the recorded down and up sequence.");
@@ -277,7 +278,7 @@ internal static class DesktopE2E
             Until(() => RelevantKeys().Count(e => e.Key == Key.Z && !e.Up) == 1 &&
                 !RelevantKeys().Any(e => e.Up), "held-key replay did not reach the delay before key release");
             PressHotkey(hotkey);
-            Until(() => Text(app, "status-text") == "就绪，等待操作" && RelevantKeys().Any(e => e.Key == Key.Z && e.Up),
+            Until(() => Text(app, "status-text") == "就緒，等待操作" && RelevantKeys().Any(e => e.Key == Key.Z && e.Up),
                 "shortcut stop did not release the key held by replay");
             PumpFor(150);
             if (!RelevantKeys().SequenceEqual(new[] { (Key.Z, false), (Key.Z, true) }) ||
@@ -294,14 +295,14 @@ internal static class DesktopE2E
             ActivateTarget(target, editor);
             PressHotkey(hotkey);
             Until(() => editor.Text == beforeMismatch + "XY", "global script could not replay in resized window");
-            Until(() => Text(app, "status-text") == "就绪，等待操作", "selected script did not finish");
+            Until(() => Text(app, "status-text") == "就緒，等待操作", "selected script did not finish");
             if (!catalog.Load(firstId)!.GlobalKeyboardRecording || !catalog.Load(secondId)!.GlobalKeyboardRecording)
                 throw new Exception("Global recording scope was not saved.");
             var current = CurrentScript(app);
             current.GlobalKeyboardRecording = false;
             var windowInfo = Native.ListWindows(new WindowInteropHelper(app).Handle).Single(w => w.Handle == _keyboardTarget);
             var preflight = typeof(MainWindow).GetMethod("RunPreflight", BindingFlags.Instance | BindingFlags.NonPublic)!;
-            if (preflight.Invoke(app, [windowInfo]) is not string error || !error.Contains("尺寸与脚本不符"))
+            if (preflight.Invoke(app, [windowInfo]) is not string error || !error.Contains("尺寸與腳本不符"))
                 throw new Exception("Legacy target-bound scripts lost dimension validation.");
             current.GlobalKeyboardRecording = true;
             Eval(app, "document.getElementById('nav-editor').click()");
@@ -315,7 +316,7 @@ internal static class DesktopE2E
             hotkey = CurrentScript(app).Hotkey;
             ActivateTarget(target, editor);
             PressHotkey(hotkey);
-            Until(() => Text(app, "status-text") == "正在录制", "save-failure recording did not start");
+            Until(() => Text(app, "status-text") == "正在錄製", "save-failure recording did not start");
             AddTestRecordedText(app, "R");
             var recoveryId = CurrentScript(app).Id;
             PressHotkey(hotkey);
@@ -323,7 +324,7 @@ internal static class DesktopE2E
             var blocker = Path.Combine(root, "scripts", recoveryId + ".json");
             Directory.CreateDirectory(blocker);
             ConfirmRecordingName(app, "E2E recovered");
-            Until(() => Text(app, "status-hint").Contains("保存失败"), "named recording save failure was not shown");
+            Until(() => Text(app, "status-hint").Contains("儲存失敗"), "named recording save failure was not shown");
             if (CurrentScript(app).Steps.Count != 1 || catalog.List().Scripts.Count != 2 ||
                 !EvalBool(app, "document.getElementById('recording-name-dialog').open"))
                 throw new Exception("Naming-save failure lost recorded steps, closed its dialog, or reported a saved file.");
@@ -345,8 +346,8 @@ internal static class DesktopE2E
                 "recovered recording draft did not reopen");
             var temporaryBlocker = Path.Combine(root, "scripts", recoveryId + ".json.tmp");
             Directory.CreateDirectory(temporaryBlocker);
-            Eval(app, "document.querySelector('#steps .step-delete[title=\"删除步骤\"]').click()");
-            Until(() => CurrentScript(app).Steps.Count == 0 && Text(app, "status-hint").Contains("保存失败"),
+            Eval(app, "document.querySelector('#steps .step-delete[title=\"刪除步驟\"]').click()");
+            Until(() => CurrentScript(app).Steps.Count == 0 && Text(app, "status-hint").Contains("儲存失敗"),
                 "deleting the final step did not expose the save failure");
             Eval(app, "document.getElementById('nav-execution').click()");
             Until(() => EvalBool(app, "!document.getElementById('workspace-view').hidden"),
@@ -365,7 +366,7 @@ internal static class DesktopE2E
             hotkey = CurrentScript(app).Hotkey;
             ActivateTarget(target, editor);
             PressHotkey(hotkey);
-            Until(() => Text(app, "status-text") == "正在录制", "discard-test recording did not start");
+            Until(() => Text(app, "status-text") == "正在錄製", "discard-test recording did not start");
             AddTestRecordedText(app, "D");
             PressHotkey(hotkey);
             WaitForNaming(app);
@@ -437,7 +438,7 @@ internal static class DesktopE2E
             if (processId != child.Id) throw new Exception("Target handle does not belong to the test child.");
             ActivateWindow(app);
             Eval(app, "document.getElementById('record-button').click()");
-            Until(() => Text(app, "status-text") == "正在录制", "button did not install capture");
+            Until(() => Text(app, "status-text") == "正在錄製", "button did not install capture");
             var capture = (KeyboardCapture)typeof(MainWindow).GetField("_keyboardCapture", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(app)!;
             app.WindowState = WindowState.Minimized;
             BringWindowToTop(handle);
@@ -494,7 +495,7 @@ internal static class DesktopE2E
             Eval(app, "document.getElementById('" + control + "').value='" + key + "';document.getElementById('" + control + "').dispatchEvent(new Event('change'))");
             PumpFor(80);
             if (EvalString(app, "document.getElementById('" + control + "').value") == key &&
-                !Text(app, "status-hint").Contains("占用")) return key;
+                !Text(app, "status-hint").Contains("佔用")) return key;
         }
         throw new Exception("No global shortcut could be registered for the desktop test.");
     }
@@ -525,13 +526,13 @@ internal static class DesktopE2E
         try
         {
             Post(app, "{action:'hotkey',value:'" + occupiedKey + "'}");
-            if (!Text(app, "status-hint").Contains("占用") || CurrentScript(app).Hotkey != originalHotkey ||
+            if (!Text(app, "status-hint").Contains("佔用") || CurrentScript(app).Hotkey != originalHotkey ||
                 EvalString(app, "document.getElementById('hotkey-select').value") != originalHotkey)
                 throw new Exception("An occupied shortcut did not preserve the previous shortcut and explain the conflict.");
         }
         finally { Native.UnregisterHotKey(_keyboardTarget, 913); }
         Post(app, "{action:'hotkey',value:'" + originalHotkey + "'}");
-        if (CurrentScript(app).Hotkey != originalHotkey || Text(app, "status-hint").Contains("占用"))
+        if (CurrentScript(app).Hotkey != originalHotkey || Text(app, "status-hint").Contains("佔用"))
             throw new Exception("A successful shortcut selection retained the previous occupied-shortcut warning.");
         Console.WriteLine("PASS Windows UI: occupied shortcut preserves the current key and successful selection clears its warning");
     }
@@ -579,12 +580,12 @@ internal static class DesktopE2E
             Eval(app, "document.getElementById('execution-start').click()");
             if (!automatic)
             {
-                Until(() => EvalBool(app, "document.getElementById('execution-progress-label').textContent==='等待目标窗口'"), "manual flow did not wait");
+                Until(() => EvalBool(app, "document.getElementById('execution-progress-label').textContent==='等待目標視窗'"), "manual flow did not wait");
                 if (editor.Text.Length != 0 || Native.GetForegroundWindow() != new WindowInteropHelper(app).Handle)
                     throw new Exception("Manual flow switched or sent keys before the user switched.");
                 ActivateTarget(target, editor);
             }
-            try { Until(() => editor.Text == "XY" && Text(app, "status-text") == "就绪，等待操作", "flow did not finish playback", 10000); }
+            try { Until(() => editor.Text == "XY" && Text(app, "status-text") == "就緒，等待操作", "flow did not finish playback", 10000); }
             catch (TimeoutException) { throw new Exception($"Flow auto={automatic} return={back}: text={editor.Text}, status={Text(app, "status-text")}, message={Text(app, "execution-message")}"); }
             var expected = back ? new WindowInteropHelper(app).Handle : new WindowInteropHelper(target).Handle;
             Until(() => Native.GetForegroundWindow() == expected, "flow completion left the wrong foreground window");
@@ -594,9 +595,9 @@ internal static class DesktopE2E
         ActivateWindow(app);
         editor.Clear();
         Eval(app, "document.getElementById('execution-start').click()");
-        Until(() => Text(app, "status-text") == "正在执行脚本", "return-on-stop test did not start");
+        Until(() => Text(app, "status-text") == "正在執行腳本", "return-on-stop test did not start");
         Eval(app, "document.getElementById('execution-start').click()");
-        Until(() => Native.GetForegroundWindow() == new WindowInteropHelper(app).Handle && Text(app, "status-text") == "就绪，等待操作",
+        Until(() => Native.GetForegroundWindow() == new WindowInteropHelper(app).Handle && Text(app, "status-text") == "就緒，等待操作",
             "manual stop did not return to FlowKey");
         if (editor.Text.Length != 0) throw new Exception("Stopped script continued sending keys.");
         CurrentScript(app).Steps[0].DelayMs = originalDelay;
@@ -610,8 +611,8 @@ internal static class DesktopE2E
         ActivateWindow(app);
         editor.Clear();
         Eval(app, "document.getElementById('execution-start').click()");
-        Until(() => Text(app, "execution-message").Contains("未找到指定窗口") && Text(app, "execution-message").Contains("FlowKey closed flow target"), "closed automatic target did not identify the missing window");
-        if (editor.Text.Length != 0 || Text(app, "status-text") != "就绪，等待操作") throw new Exception("Closed target started execution.");
+        Until(() => Text(app, "execution-message").Contains("未找到指定視窗") && Text(app, "execution-message").Contains("FlowKey closed flow target"), "closed automatic target did not identify the missing window");
+        if (editor.Text.Length != 0 || Text(app, "status-text") != "就緒，等待操作") throw new Exception("Closed target started execution.");
         Eval(app, "document.getElementById('nav-settings').click()");
         Post(app, "{action:'flowSettings',autoSwitch:false,returnToApp:false,targetId:''}");
         Eval(app, "document.getElementById('nav-execution').click()");
@@ -645,16 +646,16 @@ internal static class DesktopE2E
             Native.ShowWindow(handle, 6); // The configured target can be minimized when Start is clicked.
             ActivateWindow(app);
             Eval(app, "document.getElementById('execution-start').click()");
-            Until(() => EvalBool(app, "document.getElementById('execution-help').textContent.includes('正在自动切换')"),
+            Until(() => EvalBool(app, "document.getElementById('execution-help').textContent.includes('正在自動切換')"),
                 "automatic start did not expose cancellable activation wait");
             Eval(app, "document.getElementById('execution-start').click()");
             PumpFor(350);
-            if (received.IsCompleted || Text(app, "status-text") != "就绪，等待操作")
+            if (received.IsCompleted || Text(app, "status-text") != "就緒，等待操作")
                 throw new Exception("Cancelled automatic activation still executed the script.");
             ActivateWindow(app);
             Eval(app, "document.getElementById('execution-start').click()");
             Until(() => received.IsCompleted && received.GetAwaiter().GetResult() &&
-                Text(app, "status-text") == "就绪，等待操作" && Native.GetForegroundWindow() == new WindowInteropHelper(app).Handle,
+                Text(app, "status-text") == "就緒，等待操作" && Native.GetForegroundWindow() == new WindowInteropHelper(app).Handle,
                 "automatic switch did not deliver script to the separate process and return", 15000);
             Eval(app, "document.getElementById('nav-settings').click()");
             Post(app, "{action:'flowSettings',autoSwitch:false,returnToApp:false,targetId:''}");
@@ -742,7 +743,7 @@ internal static class DesktopE2E
         var index = scripts.ToList().FindIndex(script => script.Id == id);
         if (index < 0) throw new Exception("Expected script missing from the catalog.");
         Eval(app, "document.querySelectorAll('.saved-script')[" + index + "].click()");
-        Until(() => CurrentScript(app).Id == id && Text(app, "execution-step-count") == scripts[index].Steps.Count + " 个步骤",
+        Until(() => CurrentScript(app).Id == id && Text(app, "execution-step-count") == scripts[index].Steps.Count + " 個步驟",
             "saved script did not open in the execution workspace");
     }
 
@@ -881,6 +882,28 @@ internal static class DesktopE2E
         var code = (ushort)(0x70 + int.Parse(key[1..]) - 1);
         Native.SendKey(code);
         Native.SendKey(code, true);
+    }
+
+    private static void VerifyAppearance(MainWindow app)
+    {
+        Until(() => EvalBool(app, "document.fonts.check('600 24px \"FlowKey Serif\"','錄製與編輯') && document.querySelector('.brand img').naturalWidth>0"), "offline font or logo failed to load", 30000);
+        if (app.Icon is null || !EvalBool(app, "document.documentElement.lang==='zh-Hant' && getComputedStyle(document.querySelector('.sidebar')).backgroundColor==='rgb(255, 255, 255)'"))
+            throw new Exception("Traditional Chinese layout or window icon missing.");
+        foreach (var width in new[] {850d,1180d,1600d})
+        {
+            app.Width = width;
+            PumpFor(200);
+            foreach (var view in new[] {"editor","execution","settings"})
+            {
+                Eval(app, "document.getElementById('nav-" + view + "').click()");
+                PumpFor(100);
+                if (!EvalBool(app, "document.documentElement.scrollWidth<=innerWidth+1"))
+                    throw new Exception($"Layout overflows at width {width} in {view}.");
+            }
+        }
+        app.Width = 1180;
+        Eval(app, "document.getElementById('nav-editor').click()");
+        Console.WriteLine("PASS Traditional Chinese TailAdmin layout, offline serif font, shared logo/window icon, and all pages at 850/1180/1600 widths");
     }
 
     private static void Post(MainWindow app, string body)

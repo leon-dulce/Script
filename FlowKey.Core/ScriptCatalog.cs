@@ -16,9 +16,9 @@ public sealed class ScriptCatalog(string directory)
         {
             try
             {
-                var script = new ScriptStore(path).Load() ?? throw new InvalidDataException("脚本文件不存在。");
+                var script = new ScriptStore(path).Load() ?? throw new InvalidDataException("腳本檔案不存在。");
                 if (!string.Equals(Path.GetFileNameWithoutExtension(path), script.Id, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidDataException("脚本编号与文件名不符。");
+                    throw new InvalidDataException("腳本編號與檔名不符。");
                 scripts.Add(script);
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException)
@@ -55,7 +55,7 @@ public sealed class ScriptCatalog(string directory)
 
     private string PathFor(string id)
     {
-        if (!Guid.TryParseExact(id, "N", out _)) throw new InvalidDataException("脚本编号无效。");
+        if (!Guid.TryParseExact(id, "N", out _)) throw new InvalidDataException("腳本編號無效。");
         return Path.Combine(DirectoryPath, id + ".json");
     }
 }

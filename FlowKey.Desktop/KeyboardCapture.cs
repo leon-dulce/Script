@@ -51,7 +51,7 @@ internal sealed class KeyboardCapture : IDisposable
         if (failure is not null)
         {
             _thread.Join();
-            throw new InvalidOperationException("无法启用键盘监听。", failure);
+            throw new InvalidOperationException("無法啟用鍵盤監聽。", failure);
         }
     }
 

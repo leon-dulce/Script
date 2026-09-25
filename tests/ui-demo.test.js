@@ -61,35 +61,14 @@ test('name and execution settings validate limits and failure cases', () => {
   for (const args of [['bad',1,100],['count',0,100],['count',1.5,100],['count',10001,100],['once',1,99],['once',1,60001]]) assert.throws(() => model.plan(...args));
 });
 
-test('Rem theme is optional, persists both states and preserves all flow settings and scripts', () => {
-  const state = model.initial();
-  assert.equal(state.settings.rem, false);
-  const before = JSON.stringify(state.scripts);
-  state.settings.auto = true; state.settings.back = true; state.settings.target = 'game';
-  for (const enabled of [true, false, true]) {
-    state.settings = model.withTheme(state.settings, enabled);
-    const restored = model.load(JSON.stringify(state));
-    assert.equal(restored.settings.rem, enabled);
-    assert.equal(restored.settings.auto, true);
-    assert.equal(restored.settings.back, true);
-    assert.equal(restored.settings.target, 'game');
-    assert.equal(JSON.stringify(restored.scripts), before);
-  }
-  for (const value of ['true', 1, null, undefined]) assert.throws(() => model.withTheme(state.settings, value));
-});
-
-test('legacy or malformed theme preference retains saved scripts and defaults theme off', () => {
-  for (const value of [undefined, 'true', 1, null]) {
-    const state = model.initial(); state.settings.rem = value; state.scripts[0].name = '保留我的腳本';
-    const restored = model.load(JSON.stringify(state));
-    assert.equal(restored.settings.rem, false);
-    assert.equal(restored.scripts[0].name, '保留我的腳本');
-  }
-  assert.match(html, /role="switch" id="rem-theme"/);
-  assert.match(html, /aria-labelledby="rem-theme-label"/);
-  assert.match(html, /data.settings=\{\.\.\.data.settings,auto:/);
-  assert.match(html, /\.rem-only\{display:none\}/);
-  assert.match(html, /prefers-reduced-motion:reduce/);
+test('restored TailAdmin theme ignores previously saved Rem preference without losing scripts', () => {
+  assert.doesNotMatch(html, /rem-theme|rem-character|rem-banner|雷姆|withTheme/);
+  const state = model.initial(); state.settings.rem = true;
+  state.scripts[0].name = '保留我的腳本';
+  const restored = model.load(JSON.stringify(state));
+  assert.equal(restored.settings.rem, undefined);
+  assert.equal(restored.scripts[0].name, '保留我的腳本');
+  assert.equal(restored.settings.target, state.settings.target);
 });
 
 test('demo preview serves offline assets with correct types and rejects unknown routes', async () => {

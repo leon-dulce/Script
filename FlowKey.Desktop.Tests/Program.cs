@@ -29,7 +29,7 @@ finally
 }
 Console.WriteLine("PASS Win32 layouts, module handle, window enumeration, and input hooks");
 
-var sampleWindow = new WindowInfo((nint)123, 1, "测试窗口", "test", "", 800, 600);
+var sampleWindow = new WindowInfo((nint)123, 1, "測試視窗", "test", "", 800, 600);
 var selectedWindow = WindowSelection.Find([sampleWindow], "123", _ => true);
 if (selectedWindow is null || selectedWindow.Value.Handle != sampleWindow.Handle) throw new Exception("Window selection failed.");
 if (WindowSelection.Find([sampleWindow], "123", _ => false) is not null) throw new Exception("Closed window was selected.");
@@ -166,12 +166,19 @@ var assetsRoot = Path.Combine(Path.GetTempPath(), "FlowKey-assets-test-" + Guid.
 try
 {
     var assets = WebAssets.ExtractTo(assetsRoot);
-    foreach (var name in new[] { "index.html", "app.js", "desktop.js" })
+    foreach (var name in WebAssets.Names)
         if (new FileInfo(Path.Combine(assets, name)).Length == 0) throw new Exception($"Embedded asset missing: {name}");
     var original = File.ReadAllText(Path.Combine(assets, "desktop.js"));
     File.WriteAllText(Path.Combine(assets, "desktop.js"), "corrupted");
     if (WebAssets.ExtractTo(assetsRoot) != assets || File.ReadAllText(Path.Combine(assets, "desktop.js")) != original)
         throw new Exception("Embedded assets were not restored.");
+    var font = Path.Combine(assets, "assets/NotoSerifTC.ttf");
+    var fontBytes = File.ReadAllBytes(font);
+    File.WriteAllBytes(font, [0]);
+    File.Delete(Path.Combine(assets, "assets/flowkey.svg"));
+    WebAssets.ExtractTo(assetsRoot);
+    if (!File.ReadAllBytes(font).SequenceEqual(fontBytes) || !File.Exists(Path.Combine(assets, "assets/flowkey.svg")))
+        throw new Exception("Offline branding assets did not self-repair.");
     Console.WriteLine("PASS embedded UI assets extract and self-repair");
 }
 finally

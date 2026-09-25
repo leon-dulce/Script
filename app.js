@@ -2,20 +2,20 @@
   'use strict';
 
   const STORAGE_KEY = 'flowkey-demo-v1';
-  const WINDOW_NAMES = ['记事本 — 每周报告.txt', '浏览器 — 工作台', 'Excel — 任务清单.xlsx'];
+  const WINDOW_NAMES = ['記事本 — 每週報告.txt', '瀏覽器 — 工作臺', 'Excel — 任務清單.xlsx'];
   const HOTKEYS = ['F8', 'F9', 'F10', 'F12'];
   const SAMPLE_STEPS = [
-    { id: 1, type: 'click', title: '点击文档编辑区', detail: '窗口坐标 (284, 156)', delay: 500 },
-    { id: 2, type: 'keyboard', title: '输入文字', detail: '“本周项目进展”', delay: 500 },
-    { id: 3, type: 'key', title: '按下 Enter', detail: '换到下一行', delay: 800 },
-    { id: 4, type: 'scroll', title: '向下滚动', detail: '滚动 2 次', delay: 500 },
-    { id: 5, type: 'key', title: '按下 Ctrl + S', detail: '保存文件', delay: 0 }
+    { id: 1, type: 'click', title: '點選文件編輯區', detail: '視窗座標 (284, 156)', delay: 500 },
+    { id: 2, type: 'keyboard', title: '輸入文字', detail: '“本週專案進展”', delay: 500 },
+    { id: 3, type: 'key', title: '按下 Enter', detail: '換到下一行', delay: 800 },
+    { id: 4, type: 'scroll', title: '向下滾動', detail: '滾動 2 次', delay: 500 },
+    { id: 5, type: 'key', title: '按下 Ctrl + S', detail: '儲存檔案', delay: 0 }
   ];
   const DEMO_ACTIONS = [
-    { type: 'click', title: '点击按钮', detail: '窗口坐标 (412, 248)', delay: 500 },
-    { type: 'keyboard', title: '输入文字', detail: '“示例内容”', delay: 500 },
-    { type: 'key', title: '按下 Enter', detail: '确认当前输入', delay: 400 },
-    { type: 'scroll', title: '向下滚动', detail: '滚动 1 次', delay: 500 }
+    { type: 'click', title: '點選按鈕', detail: '視窗座標 (412, 248)', delay: 500 },
+    { type: 'keyboard', title: '輸入文字', detail: '“示例內容”', delay: 500 },
+    { type: 'key', title: '按下 Enter', detail: '確認當前輸入', delay: 400 },
+    { type: 'scroll', title: '向下滾動', detail: '滾動 1 次', delay: 500 }
   ];
 
   function createInitialState(saved) {
@@ -78,11 +78,11 @@
     function renderSteps() {
       const container = $('steps');
       container.replaceChildren();
-      $('step-count').textContent = `${state.steps.length} 个步骤`;
+      $('step-count').textContent = `${state.steps.length} 個步驟`;
       if (state.steps.length === 0) {
         const empty = document.createElement('div');
         empty.className = 'empty';
-        empty.textContent = '暂无步骤。录制时点击下方按钮，添加模拟操作。';
+        empty.textContent = '暫無步驟。錄製時點選下方按鈕，新增模擬操作。';
         container.appendChild(empty);
       }
       state.steps.forEach((step, index) => {
@@ -106,7 +106,7 @@
         tools.className = 'step-tools';
         const delay = document.createElement('select');
         delay.className = 'delay';
-        delay.setAttribute('aria-label', `步骤 ${index + 1} 的等待时间`);
+        delay.setAttribute('aria-label', `步驟 ${index + 1} 的等待時間`);
         [0, 400, 500, 800, 1000, 2000, 5000].forEach(value => {
           const option = document.createElement('option');
           option.value = String(value);
@@ -130,8 +130,8 @@
         remove.className = 'step-delete';
         remove.type = 'button';
         remove.textContent = '×';
-        remove.title = '删除步骤';
-        remove.setAttribute('aria-label', `删除步骤 ${index + 1}`);
+        remove.title = '刪除步驟';
+        remove.setAttribute('aria-label', `刪除步驟 ${index + 1}`);
         remove.disabled = state.mode !== 'ready';
         remove.addEventListener('click', () => {
           state.steps = removeStep(state.steps, step.id);
@@ -152,19 +152,19 @@
       const paused = state.mode === 'paused';
       const running = state.mode === 'running';
       $('status-dot').className = `pulse${recording ? ' recording' : running ? ' running' : ''}`;
-      $('status-text').textContent = recording ? '正在录制示例操作' : paused ? '录制已暂停' : running ? '正在执行脚本' : '就绪，等待操作';
-      $('status-hint').textContent = recording ? '切换页面将暂停录制' : paused ? '返回后点击继续录制' : running ? '再次按快捷键可立即停止' : state.loadedSample ? '当前已载入示例脚本' : '本地编辑，尚未自动保存';
-      $('record-button').querySelector('span').textContent = recording ? '结束录制' : paused ? '继续录制' : '开始录制';
+      $('status-text').textContent = recording ? '正在錄製示例操作' : paused ? '錄製已暫停' : running ? '正在執行腳本' : '就緒，等待操作';
+      $('status-hint').textContent = recording ? '切換頁面將暫停錄製' : paused ? '返回後點選繼續錄製' : running ? '再次按快捷鍵可立即停止' : state.loadedSample ? '當前已載入示例腳本' : '本地編輯，尚未自動儲存';
+      $('record-button').querySelector('span').textContent = recording ? '結束錄製' : paused ? '繼續錄製' : '開始錄製';
       $('record-button').disabled = running;
       $('run-button').disabled = !running && !canRun(state);
-      $('run-button').textContent = running ? '■  停止执行' : '▶  执行脚本';
+      $('run-button').textContent = running ? '■  停止執行' : '▶  執行腳本';
       $('run-button').className = `button ${running ? 'danger' : 'primary'}`;
       $('add-step').disabled = !recording;
       $('window-select').disabled = running || recording;
       $('hotkey-select').disabled = running || recording;
       $('save-button').disabled = running || recording;
       const completed = running ? state.currentStep + 1 : 0;
-      $('progress-label').textContent = running ? '执行中' : '准备就绪';
+      $('progress-label').textContent = running ? '執行中' : '準備就緒';
       $('progress-fraction').textContent = `${completed} / ${state.steps.length}`;
       $('progress-fill').style.width = state.steps.length ? `${100 * completed / state.steps.length}%` : '0%';
       renderSteps();
@@ -181,7 +181,7 @@
 
     function runNext(index) {
       if (state.mode !== 'running') return;
-      if (index >= state.steps.length) { stopRun('示例脚本执行完成'); return; }
+      if (index >= state.steps.length) { stopRun('示例腳本執行完成'); return; }
       state.currentStep = index;
       render();
       const wait = Math.min(Math.max(state.steps[index].delay, 500), 1300);
@@ -189,11 +189,11 @@
     }
 
     function toggleRun() {
-      if (state.mode === 'running') { stopRun('已停止执行'); return; }
-      if (!canRun(state)) { toast('请先结束录制并添加至少一个步骤'); return; }
+      if (state.mode === 'running') { stopRun('已停止執行'); return; }
+      if (!canRun(state)) { toast('請先結束錄製並新增至少一個步驟'); return; }
       state.mode = 'running';
       state.currentStep = -1;
-      toast('正在演示脚本执行，不会控制真实窗口');
+      toast('正在演示腳本執行，不會控制真實視窗');
       runNext(0);
     }
 
@@ -201,16 +201,16 @@
       if (state.mode === 'running') return;
       if (state.mode === 'recording') {
         state.mode = 'ready';
-        toast('录制结束，可检查并保存步骤');
+        toast('錄製結束，可檢查並儲存步驟');
       } else if (state.mode === 'paused') {
         state.mode = 'recording';
-        toast('继续录制');
+        toast('繼續錄製');
       } else {
         state.steps = [];
         state.currentStep = -1;
         state.mode = 'recording';
         state.loadedSample = false;
-        toast('开始新的模拟录制，原步骤已清空');
+        toast('開始新的模擬錄製，原步驟已清空');
       }
       render();
     });
@@ -225,21 +225,21 @@
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify({ windowName: state.windowName, hotkey: state.hotkey, steps: state.steps }));
         state.loadedSample = false;
-        toast('脚本已保存在当前浏览器');
-      } catch (_) { toast('保存失败，请检查浏览器存储权限'); }
+        toast('腳本已儲存在當前瀏覽器');
+      } catch (_) { toast('儲存失敗，請檢查瀏覽器儲存許可權'); }
       render();
     });
     $('window-select').addEventListener('change', event => {
       state.windowName = event.target.value;
       state.loadedSample = false;
       render();
-      toast('已切换示例目标窗口');
+      toast('已切換示例目標視窗');
     });
     $('hotkey-select').addEventListener('change', event => {
       state.hotkey = event.target.value;
       state.loadedSample = false;
       render();
-      toast(`快捷键已设为 ${state.hotkey}；点击保存脚本可保留设置`);
+      toast(`快捷鍵已設為 ${state.hotkey}；點選儲存腳本可保留設定`);
     });
     document.addEventListener('keydown', event => {
       if (event.key !== state.hotkey || event.repeat) return;
@@ -253,7 +253,7 @@
       if (state.mode === 'recording') {
         state.mode = 'paused';
         render();
-      } else if (state.mode === 'running') stopRun('页面失去焦点，已停止执行');
+      } else if (state.mode === 'running') stopRun('頁面失去焦點，已停止執行');
     });
     render();
   }
