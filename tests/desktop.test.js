@@ -91,7 +91,7 @@ function desktop() {
       steps: [{ type: 'Click', x: 2, y: 3, button: 'Left', delayMs: 100 }] },
     ...overrides
   });
-  return { get, select, sent, alerts, confirmations, scrolled, state,
+  return { document, get, select, sent, alerts, confirmations, scrolled, state,
     push: value => hostMessage({ data: value }), setConfirm: value => { confirmResult = value; } };
 }
 
@@ -273,9 +273,12 @@ test('Escape cannot silently discard naming, explicit discard requires confirmat
   assert.equal(get('recording-name-dialog').open, true);
   assert.equal(sent.length, 1);
   ui.setConfirm(false);
+  get('recording-name-input').value = '未完成名稱';
   get('recording-name-discard').click();
   assert.equal(sent.length, 1);
   assert.equal(get('recording-name-dialog').open, true);
+  assert.equal(get('recording-name-input').value, '未完成名稱');
+  assert.equal(ui.document.activeElement, get('recording-name-input'), 'cancelling discard returns focus to naming');
   ui.setConfirm(true);
   get('recording-name-discard').click();
   assert.equal(sent.at(-1).action, 'discardRecording');

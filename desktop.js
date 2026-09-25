@@ -478,7 +478,9 @@
       if (event.key === 'Enter') { event.preventDefault(); saveRecording(); }
     });
     $('recording-name-discard').addEventListener('click', () => {
-      if (state?.namingRequired && window.confirm('放棄這次錄製後，剛才的步驟就不會保留。確定不儲存嗎？')) send('discardRecording');
+      if (!state?.namingRequired) return;
+      if (window.confirm('放棄這次錄製後，剛才的步驟就不會保留。確定不儲存嗎？')) send('discardRecording');
+      else $('recording-name-input').focus();
     });
     window.chrome.webview.addEventListener('message', event => { state = event.data; render(); });
     showView('editor');

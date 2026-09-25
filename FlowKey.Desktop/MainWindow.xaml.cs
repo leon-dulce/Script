@@ -114,7 +114,11 @@ public partial class MainWindow : Window
                     {
                         if (FlowDialog.Ask(this, dialog.Message, dialog.Kind == CoreWebView2ScriptDialogKind.Confirm)) dialog.Accept();
                     }
-                    finally { deferral.Complete(); }
+                    finally
+                    {
+                        deferral.Complete();
+                        Browser.Focus();
+                    }
                 });
             };
             Browser.CoreWebView2.WebMessageReceived += OnWebMessage;

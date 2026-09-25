@@ -96,6 +96,7 @@ internal static class DesktopE2E
             WaitForNaming(app);
             Until(() => Native.GetForegroundWindow() == new WindowInteropHelper(app).Handle,
                 "finishing recording did not bring the naming dialog to the foreground");
+            VerifyContinueNamingFocus(app);
             if (catalog.List().Scripts.Count != 0) throw new Exception("Recording was saved before its name was confirmed.");
             app.Close();
             PumpFor(100);
@@ -1113,6 +1114,44 @@ internal static class DesktopE2E
         longDialog.ShowDialog();
         if (!bounded) throw new Exception("Long dialog content escaped its bounded window or altered the message.");
         Console.WriteLine("PASS themed native dialogs: WebView alert/confirm bridge, accept, cancel and close preserve results");
+    }
+
+    private static void VerifyContinueNamingFocus(MainWindow app)
+    {
+        var appHandle = new WindowInteropHelper(app).Handle;
+        if (Native.GetForegroundWindow() != appHandle) throw new DesktopUnavailableException("Naming window lost focus before keyboard test.");
+        Eval(app, "document.getElementById('recording-name-input').focus();document.getElementById('recording-name-input').value=''");
+        Native.SendKey(0x42);
+        Native.SendKey(0x42, true);
+        Until(() => EvalString(app, "document.getElementById('recording-name-input').value").Length == 1,
+            "naming input did not accept a real key before confirmation");
+        Eval(app, "document.getElementById('recording-name-input').value=''");
+
+        var visited = false;
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
+        timer.Tick += (_, _) =>
+        {
+            var dialog = app.OwnedWindows.OfType<FlowDialog>().FirstOrDefault(d => d.IsVisible);
+            if (dialog is null) return;
+            visited = true;
+            timer.Stop();
+            if (dialog.Heading.Text != "不儲存這次錄製？" || dialog.CancelAction.Content?.ToString() != "繼續命名")
+                throw new Exception("The discard confirmation did not offer continuing to name.");
+            dialog.CancelAction.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        };
+        timer.Start();
+        try { Eval(app, "document.getElementById('recording-name-discard').click()"); }
+        finally { timer.Stop(); }
+        if (!visited || !EvalBool(app, "document.getElementById('recording-name-dialog').open"))
+            throw new Exception("Cancelling discard did not retain the naming dialog.");
+        if (Native.GetForegroundWindow() != appHandle) throw new DesktopUnavailableException("Naming window lost focus after cancelled discard.");
+        Native.SendKey(0x43);
+        Native.SendKey(0x43, true);
+        PumpFor(200);
+        if (!EvalBool(app, "document.activeElement===document.getElementById('recording-name-input') && document.getElementById('recording-name-input').value.length===1"))
+            throw new Exception("Naming focus after cancel: " + Eval(app, "({active:document.activeElement?.id,value:document.getElementById('recording-name-input').value})") +
+                $", foreground={Native.GetForegroundWindow()}, app={appHandle}, webviewFocus={app.Browser.IsKeyboardFocusWithin}");
+        Console.WriteLine("PASS Windows UI: cancelled discard returns keyboard input to the naming field");
     }
 
     private static void VerifyAppearance(MainWindow app)
