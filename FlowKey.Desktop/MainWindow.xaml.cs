@@ -98,6 +98,9 @@ public partial class MainWindow : Window
         RefreshWindows();
         try
         {
+            StartupMessage.Text = "正在檢查執行環境…";
+            await WebView2RuntimeSetup.EnsureAsync(message => StartupMessage.Text = message);
+            StartupMessage.Text = "正在開啟 FlowKey…";
             var assetDirectory = WebAssets.ExtractTo(Path.Combine(_dataDirectory, "assets"));
             var webViewEnvironment = await CoreWebView2Environment.CreateAsync(userDataFolder: Path.Combine(_dataDirectory, "WebView2"));
             await Browser.EnsureCoreWebView2Async(webViewEnvironment);
@@ -135,11 +138,16 @@ public partial class MainWindow : Window
                     return;
                 }
                 _pageReady = true;
+                StartupStatus.Visibility = Visibility.Collapsed;
                 Publish();
             };
             Browser.Source = new Uri("https://flowkey.local/index.html");
         }
-        catch (Exception error) { FlowDialog.Ask(this, $"FlowKey 沒有順利開啟。請確認已安裝 WebView2 Runtime，再試一次。\n錯誤資訊：{error.Message}"); Close(); }
+        catch (Exception error)
+        {
+            FlowDialog.Ask(this, $"FlowKey 沒有順利開啟。\n{error.Message}\n若仍無法開啟，可從 Microsoft 官方網站安裝 WebView2 Runtime：{WebView2RuntimeSetup.DownloadPage}");
+            Close();
+        }
     }
 
     private void OnClosing(object? sender, CancelEventArgs e)

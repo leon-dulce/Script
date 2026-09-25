@@ -170,6 +170,7 @@ if (activation.Observe(0, true, false) != ActivationStatus.Waiting ||
     new WindowActivationWait(0).Observe(50, false, false) != ActivationStatus.Missing)
     throw new Exception("Delayed/transient/denied/closed window activation was handled incorrectly.");
 Console.WriteLine("PASS delayed foreground activation, stable focus, timeout and closed-window rejection");
+await WebView2RuntimeSetupTests.Run();
 DesktopE2E.Run();
 
 var assetsRoot = Path.Combine(Path.GetTempPath(), "FlowKey-assets-test-" + Guid.NewGuid().ToString("N"));
@@ -178,6 +179,8 @@ try
     var assets = WebAssets.ExtractTo(assetsRoot);
     foreach (var name in WebAssets.Names)
         if (new FileInfo(Path.Combine(assets, name)).Length == 0) throw new Exception($"Embedded asset missing: {name}");
+    if (File.Exists(Path.Combine(assets, "app.js")) || WebAssets.Names.Contains("app.js"))
+        throw new Exception("Demo script was included in production assets.");
     var original = File.ReadAllText(Path.Combine(assets, "desktop.js"));
     File.WriteAllText(Path.Combine(assets, "desktop.js"), "corrupted");
     if (WebAssets.ExtractTo(assetsRoot) != assets || File.ReadAllText(Path.Combine(assets, "desktop.js")) != original)
