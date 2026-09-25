@@ -7,12 +7,17 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <RuntimeIdentifier Condition="'$(Configuration)' == 'Release'">win-x64</RuntimeIdentifier>
+    <SelfContained Condition="'$(Configuration)' == 'Release'">true</SelfContained>
+    <PublishSingleFile Condition="'$(Configuration)' == 'Release'">true</PublishSingleFile>
+    <IncludeAllContentForSelfExtract Condition="'$(Configuration)' == 'Release'">true</IncludeAllContentForSelfExtract>
+    <DebugType Condition="'$(Configuration)' == 'Release'">none</DebugType>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../FlowKey.Core/FlowKey.Core.csproj" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3595.46" />
-    <Content Include="../index.html" Link="wwwroot/index.html" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="../app.js" Link="wwwroot/app.js" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="../desktop.js" Link="wwwroot/desktop.js" CopyToOutputDirectory="PreserveNewest" />
+    <EmbeddedResource Include="../index.html" LogicalName="FlowKey.Assets.index.html" />
+    <EmbeddedResource Include="../app.js" LogicalName="FlowKey.Assets.app.js" />
+    <EmbeddedResource Include="../desktop.js" LogicalName="FlowKey.Assets.desktop.js" />
   </ItemGroup>
 </Project>

@@ -56,8 +56,11 @@ public partial class MainWindow : Window
         RefreshWindows();
         try
         {
-            await Browser.EnsureCoreWebView2Async();
-            Browser.CoreWebView2.SetVirtualHostNameToFolderMapping("flowkey.local", Path.Combine(AppContext.BaseDirectory, "wwwroot"), CoreWebView2HostResourceAccessKind.DenyCors);
+            var appData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FlowKey");
+            var assetDirectory = WebAssets.ExtractTo(Path.Combine(appData, "assets"));
+            var webViewEnvironment = await CoreWebView2Environment.CreateAsync(userDataFolder: Path.Combine(appData, "WebView2"));
+            await Browser.EnsureCoreWebView2Async(webViewEnvironment);
+            Browser.CoreWebView2.SetVirtualHostNameToFolderMapping("flowkey.local", assetDirectory, CoreWebView2HostResourceAccessKind.DenyCors);
             Browser.CoreWebView2.Settings.AreDevToolsEnabled = false;
             Browser.CoreWebView2.Settings.IsWebMessageEnabled = true;
             Browser.CoreWebView2.WebMessageReceived += OnWebMessage;
@@ -65,7 +68,17 @@ public partial class MainWindow : Window
             {
                 if (!Uri.TryCreate(args.Uri, UriKind.Absolute, out var destination) || destination.Host != "flowkey.local") args.Cancel = true;
             };
-            Browser.NavigationCompleted += (_, _) => { _pageReady = true; Publish(); };
+            Browser.NavigationCompleted += (_, args) =>
+            {
+                if (!args.IsSuccess)
+                {
+                    MessageBox.Show($"无法载入内置界面：{args.WebErrorStatus}", "FlowKey");
+                    Close();
+                    return;
+                }
+                _pageReady = true;
+                Publish();
+            };
             Browser.Source = new Uri("https://flowkey.local/index.html");
         }
         catch (Exception error) { MessageBox.Show($"无法启动界面：{error.Message}\n请安装 WebView2 Runtime。", "FlowKey"); Close(); }

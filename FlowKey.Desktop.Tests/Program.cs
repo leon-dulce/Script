@@ -20,3 +20,23 @@ finally
     if (mouseHook != 0) Native.UnhookWindowsHookEx(mouseHook);
 }
 Console.WriteLine("PASS Win32 layouts, module handle, window enumeration, and input hooks");
+
+var assetsRoot = Path.Combine(Path.GetTempPath(), "FlowKey-assets-test-" + Guid.NewGuid().ToString("N"));
+try
+{
+    var assets = WebAssets.ExtractTo(assetsRoot);
+    foreach (var name in new[] { "index.html", "app.js", "desktop.js" })
+        if (new FileInfo(Path.Combine(assets, name)).Length == 0) throw new Exception($"Embedded asset missing: {name}");
+    var original = File.ReadAllText(Path.Combine(assets, "desktop.js"));
+    File.WriteAllText(Path.Combine(assets, "desktop.js"), "corrupted");
+    if (WebAssets.ExtractTo(assetsRoot) != assets || File.ReadAllText(Path.Combine(assets, "desktop.js")) != original)
+        throw new Exception("Embedded assets were not restored.");
+    Console.WriteLine("PASS embedded UI assets extract and self-repair");
+}
+finally
+{
+    var tempRoot = Path.GetFullPath(Path.GetTempPath());
+    var resolved = Path.GetFullPath(assetsRoot);
+    if (!resolved.StartsWith(tempRoot, StringComparison.OrdinalIgnoreCase)) throw new Exception("Unexpected test directory.");
+    if (Directory.Exists(resolved)) Directory.Delete(resolved, true);
+}
