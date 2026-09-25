@@ -63,8 +63,8 @@ internal static class DesktopE2E
             var catalog = new ScriptCatalog(Path.Combine(root, "scripts"));
             if (EvalBool(app, "!document.getElementById('sidebar-library').hidden"))
                 throw new Exception("Saved scripts must be hidden in the recording workspace.");
-            if (!EvalBool(app, "['load-button','save-button','new-editor-script','window-select'].every(id=>!document.getElementById(id)||document.getElementById(id).hidden)"))
-                throw new Exception("Recording still exposes manual save, reload, new-script, or window-picker controls.");
+            if (!EvalBool(app, "['load-button','save-button','new-editor-script','window-select'].every(id=>!document.getElementById(id)||document.getElementById(id).hidden) && document.getElementById('run-button').hidden && document.getElementById('recording-progress').hidden"))
+                throw new Exception("Recording still exposes removed save, reload, new-script, window-picker, execution-navigation, or progress controls.");
             Eval(app, "document.getElementById('nav-execution').click()");
             Until(() => EvalBool(app, "!document.getElementById('execution-view').hidden && document.getElementById('execution-start').disabled"),
                 "empty execution library must disable playback");
@@ -122,7 +122,7 @@ internal static class DesktopE2E
             if (catalog.List().Scripts.Count != 2) throw new Exception("An empty recording created a saved script.");
             Console.WriteLine("PASS Windows UI: real foreground hotkeys, automatic save, independent recordings, paused finish, and empty recording; step input seeded via recording callback");
 
-            Eval(app, "document.getElementById('run-button').click()");
+            Eval(app, "document.getElementById('nav-execution').click()");
             Until(() => EvalBool(app, "!document.getElementById('execution-view').hidden && !document.getElementById('sidebar-library').hidden && document.querySelectorAll('.saved-script').length===2"),
                 "opening scripts did not show the execution workspace and every saved script");
             if (!EvalBool(app, "!document.getElementById('save-execution') && !document.getElementById('new-script')"))
@@ -196,6 +196,8 @@ internal static class DesktopE2E
             Until(() => EvalBool(app, "!document.getElementById('workspace-view').hidden"), "recording navigation failed");
             if (EvalBool(app, "!document.getElementById('sidebar-library').hidden"))
                 throw new Exception("Saved scripts remained visible in the recording workspace.");
+            if (!EvalBool(app, "document.getElementById('run-button').hidden && document.getElementById('recording-progress').hidden"))
+                throw new Exception("Removed execution-navigation or progress controls reappeared on return to recording.");
             Console.WriteLine("PASS Windows UI: library selection, shortcut target capture, target-size failure, and separate recording workspace");
 
             ActivateWindow(app);

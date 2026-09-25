@@ -95,7 +95,8 @@ test('recording has only start/finish and shortcut controls, and needs no mouse 
   assert.equal(sent[0].action, 'refresh');
   push(state({ selectedId: '', script: { ...state().script, clientWidth: 0, clientHeight: 0, steps: [] } }));
   for (const id of ['load-button', 'save-button', 'new-editor-script', 'pause-button', 'window-select',
-    'refresh-windows', 'script-name-row', 'open-execution', 'plan-summary']) assert.equal(get(id).hidden, true, id);
+    'refresh-windows', 'script-name-row', 'open-execution', 'plan-summary', 'run-button',
+    'recording-progress']) assert.equal(get(id).hidden, true, id);
   assert.equal(get('sidebar-library').hidden, true);
   assert.equal(get('record-button').disabled, false);
   assert.equal(get('add-text').disabled, true);
@@ -111,10 +112,26 @@ test('recording has only start/finish and shortcut controls, and needs no mouse 
   get('record-button').click();
   assert.equal(sent.at(-1).action, 'record');
   push(state());
-  assert.equal(get('run-button').textContent, '开启脚本 →');
+  const messagesBeforeLegacyClick = sent.length;
   get('run-button').click();
+  assert.equal(sent.length, messagesBeforeLegacyClick, 'removed recording shortcut has no navigation handler');
+  get('nav-execution').click();
   assert.equal(sent.at(-1).action, 'workspace');
   assert.equal(sent.at(-1).value, 'execution');
+});
+
+test('recording open-script and ready progress stay absent after updates and navigation', () => {
+  const { get, state, push } = desktop();
+  for (const update of [{}, { pendingRecord: true }, { mode: 'recording' }, { mode: 'paused' },
+    { workspace: 'execution', mode: 'running', currentStep: 0 },
+    { workspace: 'editor', message: '保存失败：请重试。', dirty: true }]) {
+    push(state(update));
+    assert.equal(get('run-button').hidden, true);
+    assert.equal(get('recording-progress').hidden, true);
+  }
+  push(state({ workspace: 'execution', mode: 'running', currentStep: 0 }));
+  assert.equal(get('execution-progress-label').textContent, '执行中');
+  assert.equal(get('execution-progress-fraction').textContent, '1 / 1');
 });
 
 test('all saved scripts appear only on the execution page and host confirms workspace navigation', () => {

@@ -273,11 +273,6 @@
     $('record-button').disabled = state.mode === 'running' || state.mode === 'recording' || state.pendingRun;
     $('finish-button').hidden = state.mode !== 'recording' && state.mode !== 'paused';
     $('add-text').disabled = isBusy() || !(state.script.clientWidth > 0 && state.script.clientHeight > 0);
-    $('run-button').disabled = isBusy();
-    $('progress-label').textContent = state.waitingForNextRun ? '等待下一轮' : state.mode === 'running' ? '执行中' : state.pendingRun ? '等待目标窗口' : '准备就绪';
-    const current = state.mode === 'running' && !state.waitingForNextRun ? state.currentStep + 1 : 0;
-    $('progress-fraction').textContent = `${current} / ${state.script.steps.length}`;
-    $('progress-fill').style.width = state.script.steps.length ? `${current * 100 / state.script.steps.length}%` : '0%';
     document.querySelector('.help').textContent = state.mode === 'recording'
       ? `按 ${state.script.hotkey} 或点击「结束并保存」即可结束录制并自动保存。`
       : state.pendingRecord ? '切到要录制的窗口后会自动开始；再次点击可取消等待。'
@@ -298,10 +293,10 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     for (const id of ['load-button', 'save-button', 'new-editor-script', 'pause-button', 'refresh-windows',
-      'window-select', 'script-name-row', 'plan-summary', 'open-execution', 'add-step']) $(id).hidden = true;
+      'window-select', 'script-name-row', 'plan-summary', 'open-execution', 'add-step',
+      'run-button', 'recording-progress']) $(id).hidden = true;
     $('finish-button').hidden = true;
     $('finish-button').textContent = '结束并保存';
-    $('run-button').textContent = '开启脚本 →';
     $('add-text').hidden = false;
     $('recording-subtitle').textContent = '在目标窗口按快捷键开始录制，再按一次结束，脚本自动保存。';
     $('recording-target-note').textContent = '在要录制的窗口按快捷键，即可自动确认目标';
@@ -330,7 +325,6 @@
     $('execution-start').addEventListener('click', () => send('run'));
     $('record-button').addEventListener('click', () => send('record'));
     $('finish-button').addEventListener('click', () => send('finish'));
-    $('run-button').addEventListener('click', () => navigate('execution'));
     $('add-text').addEventListener('click', () => {
       const value = window.prompt('输入回放时要写入的文字');
       if (value) send('text', { value });
