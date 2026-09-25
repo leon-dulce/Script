@@ -19,22 +19,25 @@ FlowKey 是一款適用於 Windows 的本機鍵盤操作錄製與回放工具。
 
 ### 使用方式
 
-1. 在「錄製與編輯」頁面選擇快捷鍵，按下快捷鍵或點選「開始錄製」。
-2. 在需要操作的視窗輸入按鍵；完成後再次按下快捷鍵或點選「停止錄製」，為腳本命名並儲存。
-3. 前往「執行腳本」，選擇腳本與執行方式，再以快捷鍵或「開始執行」啟動。再次按下快捷鍵可停止執行。
+1. 在專案根目錄按兩下 `FlowKey 1.1X1.exe`，並允許 Windows 的系統管理員權限提示。首次啟動若缺少 WebView2，程式會自動下載及安裝；遇到問題時會顯示原因與官方下載網址。
+2. 在「錄製與編輯」頁面選擇快捷鍵，按下快捷鍵或點選「開始錄製」。
+3. 在需要操作的視窗輸入按鍵；完成後再次按下快捷鍵或點選「停止錄製」，為腳本命名並儲存。
+4. 前往「執行腳本」，選擇腳本與執行方式，再以快捷鍵或「開始執行」啟動。再次按下快捷鍵可停止執行。
+
+一般使用不需輸入指令，也不需另外安裝 .NET。若需要桌面捷徑，可由使用者自行建立。
 
 腳本儲存在 `%LOCALAPPDATA%\FlowKey\scripts\`。錄製內容可能包含敏感按鍵，請在輸入密碼前停止錄製並檢查腳本。回放只會向前景目標視窗送出輸入；目標失焦、關閉或尺寸改變時會停止。此版本不錄製滑鼠操作，也不提供背景執行。
 
 ### 系統需求與建置
 
-正式桌面程式需要 Windows x64 與 [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)。預設會要求系統管理員權限，以便操作同樣以管理員權限執行的程式。從原始碼建置另需 .NET 10 SDK。
+正式桌面程式需要 Windows x64，並於缺少 [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) 時自動安裝（需網路連線）。執行檔已包含 .NET 執行環境，並預設要求系統管理員權限，以便操作同樣以管理員權限執行的程式。只有從原始碼建置才需要 .NET 10 SDK。
 
 ```powershell
 dotnet run --project FlowKey.Desktop/FlowKey.Desktop.csproj
 dotnet publish FlowKey.Desktop/FlowKey.Desktop.csproj -c Release -o dist/FlowKey-single
 ```
 
-發布後可執行 `dist/FlowKey-single/FlowKey.Desktop.exe`；若要使用專案根目錄的名稱，可將它複製為 `FlowKey.exe`。`FlowKey-UI-Demo.html` 是可在瀏覽器檢視的介面預覽，不會錄製或控制電腦。
+從原始碼發布後，可執行 `dist/FlowKey-single/FlowKey.Desktop.exe`。根目錄提供可直接按兩下執行的 `FlowKey 1.1X1.exe`。
 
 ## English
 
@@ -51,22 +54,25 @@ FlowKey is a local Windows application for recording and replaying keyboard acti
 
 ### Basic workflow
 
-1. On **Record & Edit**, choose a shortcut and start recording with the shortcut or the on-screen button.
-2. Type in the window you want to capture. Stop recording, give the script a name, and save it.
-3. On **Run Scripts**, select the script and playback mode. Start with the shortcut or the on-screen button; press the shortcut again to stop.
+1. Double-click `FlowKey 1.1X1.exe` in the project root and approve the Windows administrator prompt. On first launch, FlowKey downloads and installs WebView2 if needed; it shows an explanation and the official download page if setup fails.
+2. On **Record & Edit**, choose a shortcut and start recording with the shortcut or the on-screen button.
+3. Type in the window you want to capture. Stop recording, give the script a name, and save it.
+4. On **Run Scripts**, select the script and playback mode. Start with the shortcut or the on-screen button; press the shortcut again to stop.
+
+Normal use requires no commands or separate .NET installation. Users can create a desktop shortcut if they want one.
 
 Scripts are stored in `%LOCALAPPDATA%\FlowKey\scripts\`. Recorded keys may contain sensitive input, so stop recording before entering passwords and review saved steps. Playback sends input only to the foreground target window and stops if that window loses focus, closes, or changes size. This version does not record mouse actions or run scripts in the background.
 
 ### Requirements and build
 
-The desktop application requires Windows x64 and the [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/). It requests administrator permission by default so it can interact with other elevated programs. Building from source also requires the .NET 10 SDK.
+The desktop application requires Windows x64. It installs the [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) automatically when missing (an internet connection is required). The executable includes the .NET runtime and requests administrator permission by default so it can interact with other elevated programs. Only building from source requires the .NET 10 SDK.
 
 ```powershell
 dotnet run --project FlowKey.Desktop/FlowKey.Desktop.csproj
 dotnet publish FlowKey.Desktop/FlowKey.Desktop.csproj -c Release -o dist/FlowKey-single
 ```
 
-Run `dist/FlowKey-single/FlowKey.Desktop.exe` after publishing, or copy it to the repository root as `FlowKey.exe`. `FlowKey-UI-Demo.html` is a browser-based interface preview; it does not record or control the computer.
+After publishing from source, run `dist/FlowKey-single/FlowKey.Desktop.exe`. The repository root also provides `FlowKey 1.1X1.exe` for direct launch.
 
 ## 開發與驗證 / Development and verification
 

@@ -33,6 +33,10 @@ test('README explains FlowKey in Traditional Chinese and English with valid loca
   assert.match(readme, /錄製鍵盤操作/);
   assert.match(readme, /Keyboard recording/);
   assert.match(readme, /Windows x64/);
+  assert.match(readme, /FlowKey 1\.1X1\.exe/);
+  assert.match(readme, /自動下載及安裝/);
+  assert.match(readme, /downloads and installs WebView2/);
+  assert.doesNotMatch(readme, /FlowKey-UI-Demo/);
   assert.doesNotMatch(readme, /录制|执行|设置|脚本|键盘|电脑/);
   assert.equal((readme.match(/^```/gm) || []).length % 2, 0, 'code fences are paired');
   for (const [, target] of readme.matchAll(/\[[^\]]+\]\(([^)]+)\)/g)) {
@@ -50,4 +54,18 @@ test('desktop release metadata and title identify 1.0.0 Stable', () => {
     '<InformationalVersion>1.0.0 Stable</InformationalVersion>'])
     assert.ok(project.includes(value), `missing release metadata: ${value}`);
   assert.match(window, /Title="FlowKey 1\.0\.0 Stable"/);
+});
+
+test('root executable is a real Windows application stored with Git LFS', () => {
+  const root = path.join(__dirname, '..');
+  const executable = path.join(root, 'FlowKey 1.1X1.exe');
+  const stat = fs.statSync(executable);
+  assert.ok(stat.size > 1_000_000, 'root executable must contain the self-contained application, not an LFS pointer');
+  const handle = fs.openSync(executable, 'r');
+  try {
+    const magic = Buffer.alloc(2);
+    assert.equal(fs.readSync(handle, magic, 0, 2, 0), 2);
+    assert.equal(magic.toString('ascii'), 'MZ');
+  } finally { fs.closeSync(handle); }
+  assert.match(fs.readFileSync(path.join(root, '.gitattributes'), 'utf8'), /FlowKey\[\[:space:\]\]1\.1X1\.exe filter=lfs/);
 });
