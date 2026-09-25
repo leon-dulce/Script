@@ -60,3 +60,8 @@ try {
     Write-Output 'PASS published executable contains all nine matching FlowKey icon sizes'
 }
 finally { [void][PublishedManifest]::FreeLibrary($module) }
+$versionInfo = [Diagnostics.FileVersionInfo]::GetVersionInfo((Resolve-Path -LiteralPath $Executable).Path)
+if ($versionInfo.FileVersion -ne '1.0.0.0' -or $versionInfo.ProductVersion -ne '1.0.0 Stable' -or $versionInfo.ProductName -ne 'FlowKey') {
+    throw "Published executable has unexpected version metadata: file=$($versionInfo.FileVersion), product=$($versionInfo.ProductVersion), name=$($versionInfo.ProductName)."
+}
+Write-Output 'PASS published executable identifies FlowKey 1.0.0 Stable'

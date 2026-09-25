@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.IO;
+using System.Reflection;
 using FlowKey.Desktop;
 using FlowKey.Core;
 
@@ -8,6 +9,13 @@ if (args.Contains("--keyboard-target")) { KeyboardTarget.Run(); return; }
 if (typeof(MainWindow).GetConstructor(Type.EmptyTypes) is null)
     throw new Exception("WPF StartupUri requires a real parameterless MainWindow constructor.");
 Console.WriteLine("PASS WPF startup can construct MainWindow");
+
+var desktopAssembly = typeof(MainWindow).Assembly;
+if (desktopAssembly.GetName().Version != new Version(1, 0, 0, 0) ||
+    desktopAssembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion != "1.0.0 Stable" ||
+    desktopAssembly.GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version != "1.0.0.0")
+    throw new Exception("Desktop assembly does not identify the 1.0.0 Stable release.");
+Console.WriteLine("PASS desktop assembly carries 1.0.0 Stable version metadata");
 
 if (Marshal.SizeOf<Native.Input>() != 40) throw new Exception("SendInput layout must be 40 bytes on x64.");
 if (Marshal.SizeOf<Native.KeyboardData>() != 24) throw new Exception("Keyboard hook layout mismatch.");

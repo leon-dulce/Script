@@ -1156,6 +1156,7 @@ internal static class DesktopE2E
 
     private static void VerifyAppearance(MainWindow app)
     {
+        if (app.Title != "FlowKey 1.0.0 Stable") throw new Exception("The release version is missing from the Windows title.");
         Until(() => EvalBool(app, "document.fonts.check('600 24px \"FlowKey Serif\"','錄製與編輯') && document.querySelector('.brand img').naturalWidth>0"), "offline font or logo failed to load", 30000);
         if (app.Icon is null || !EvalBool(app, "document.documentElement.lang==='zh-Hant' && getComputedStyle(document.querySelector('.sidebar')).backgroundColor==='rgb(34, 39, 48)' && getComputedStyle(document.querySelector('.topbar')).display==='none' && !document.querySelector('.demo-badge')"))
             throw new Exception("Traditional Chinese layout or window icon missing.");
