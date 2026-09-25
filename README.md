@@ -1,70 +1,70 @@
 # FlowKey
 
-## 新版介面與圖示
+## 繁體中文
 
-正式版採用暗色桌面工具布局與繁體中文介面，移除網頁式頂部導覽與應用程式標籤，使用緊湊工具面板。主視窗固定於可視範圍，步驟、腳本清單與設定面板各自捲動；Windows 標題列採用深灰底與淺色文字，保留原生拖曳、縮放及關閉功能。錄製頁集中顯示快捷鍵、開始／停止、動作數及總時長；執行頁包含腳本庫、即時步驟與執行控制；設定入口位於本地腳本庫提示上方。
+### 專案簡介
 
-標題使用內建的 Noto Serif TC，操作文字使用 Windows 正黑體，無需連線下載字型。字型授權隨程式內建，原文見 `assets/OFL-NotoSerifTC.txt`。`assets/flowkey.svg` 為共用標誌來源，`assets/generate_icon.py` 使用 Pillow 產生九種尺寸的 Windows 圖示，供執行檔與視窗使用。
+FlowKey 是一款適用於 Windows 的本機鍵盤操作錄製與回放工具。使用者可以錄下一段按鍵操作，為腳本命名並儲存在電腦上，之後以全域快捷鍵在指定的前景視窗重播。它適合重複執行固定的鍵盤流程，不需要雲端帳號或網路服務。
 
-`FlowKey-UI-Demo.html` 是介面預覽，請與 `branding.css` 及 `assets` 資料夾一起保留；正式使用仍請雙擊最上層的 `FlowKey.exe`。
+### 主要功能
 
-FlowKey 是 Windows 全域键盘脚本录制工具。桌面版使用 .NET 10、WPF、WebView2 和 Win32 API；根目录的 `index.html` 仍可在浏览器中打开，作为不控制电脑的界面演示。
+- **錄製鍵盤操作：**記錄按下、長按期間的重複按下、放開，以及事件之間的等待時間。錄製可跨越一般 Windows 視窗。
+- **管理本機腳本：**為錄製結果命名、檢查與刪除步驟、調整等待時間，並在腳本庫中選擇或刪除已儲存的腳本。
+- **彈性執行：**支援執行一次、指定次數或持續執行；可設定每輪間隔，並以 F8、F9、F10 或 F11 啟動及停止。
+- **視窗與結果設定：**可手動切換至目標視窗，或讓程式自動切換至指定視窗；執行結束後可選擇保留目標視窗或返回 FlowKey，並設定提示橫幅、提示音、對話框與邊框。
 
-**要启动程序，请双击本资料夹最上层的 [FlowKey.exe](FlowKey.exe)。这就是最新的 Windows 执行档。** `dist/archive` 保存旧版与测试产物，`dist/FlowKey-single` 是建置用目录。
+### 使用方式
 
-## 對話框與提示
+1. 在「錄製與編輯」頁面選擇快捷鍵，按下快捷鍵或點選「開始錄製」。
+2. 在需要操作的視窗輸入按鍵；完成後再次按下快捷鍵或點選「停止錄製」，為腳本命名並儲存。
+3. 前往「執行腳本」，選擇腳本與執行方式，再以快捷鍵或「開始執行」啟動。再次按下快捷鍵可停止執行。
 
-命名、刪除、放棄錄製、輸入檢查與啟動錯誤使用一致的暗色對話框。確認視窗預設停在取消按鈕；關閉視窗也不會同意刪除或放棄。提示採用簡短、自然的繁體中文，保留失敗原因、數值範圍與無法復原等重要資訊。
+腳本儲存在 `%LOCALAPPDATA%\FlowKey\scripts\`。錄製內容可能包含敏感按鍵，請在輸入密碼前停止錄製並檢查腳本。回放只會向前景目標視窗送出輸入；目標失焦、關閉或尺寸改變時會停止。此版本不錄製滑鼠操作，也不提供背景執行。
 
-## 运行桌面版
+### 系統需求與建置
 
-Windows x64 用户双击资料夹最上层的 `FlowKey.exe`，在 Windows 管理员授权窗口选择允许后启动；取消授权则不会启动。它内含 .NET Runtime 和界面资源，不需要与其他项目档案放在一起；电脑仍需安装 [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)。
-
-从源码运行需准备 .NET 10 SDK。在 Windows PowerShell 中执行：
+正式桌面程式需要 Windows x64 與 [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)。預設會要求系統管理員權限，以便操作同樣以管理員權限執行的程式。從原始碼建置另需 .NET 10 SDK。
 
 ```powershell
 dotnet run --project FlowKey.Desktop/FlowKey.Desktop.csproj
+dotnet publish FlowKey.Desktop/FlowKey.Desktop.csproj -c Release -o dist/FlowKey-single
 ```
 
-制作独立执行档：
+發布後可執行 `dist/FlowKey-single/FlowKey.Desktop.exe`；若要使用專案根目錄的名稱，可將它複製為 `FlowKey.exe`。`FlowKey-UI-Demo.html` 是可在瀏覽器檢視的介面預覽，不會錄製或控制電腦。
+
+## English
+
+### Overview
+
+FlowKey is a local Windows application for recording and replaying keyboard actions. It lets users capture a sequence of keys, save it as a named script, and replay it in a selected foreground window with a global shortcut. It is intended for repeatable keyboard workflows and does not require a cloud account or online service.
+
+### Features
+
+- **Keyboard recording:** Captures key presses, repeated key-down events while a key is held, releases, and the time between events across ordinary Windows windows.
+- **Local script library:** Name recordings, review or remove steps, edit delays, and select or delete saved scripts.
+- **Playback options:** Run a script once, a set number of times, or continuously. Configure the interval between runs and use F8, F9, F10, or F11 to start and stop.
+- **Window and completion settings:** Switch to the target window manually or automatically, choose where focus remains after playback, and configure banners, sounds, dialogs, and border notifications.
+
+### Basic workflow
+
+1. On **Record & Edit**, choose a shortcut and start recording with the shortcut or the on-screen button.
+2. Type in the window you want to capture. Stop recording, give the script a name, and save it.
+3. On **Run Scripts**, select the script and playback mode. Start with the shortcut or the on-screen button; press the shortcut again to stop.
+
+Scripts are stored in `%LOCALAPPDATA%\FlowKey\scripts\`. Recorded keys may contain sensitive input, so stop recording before entering passwords and review saved steps. Playback sends input only to the foreground target window and stops if that window loses focus, closes, or changes size. This version does not record mouse actions or run scripts in the background.
+
+### Requirements and build
+
+The desktop application requires Windows x64 and the [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/). It requests administrator permission by default so it can interact with other elevated programs. Building from source also requires the .NET 10 SDK.
 
 ```powershell
+dotnet run --project FlowKey.Desktop/FlowKey.Desktop.csproj
 dotnet publish FlowKey.Desktop/FlowKey.Desktop.csproj -c Release -o dist/FlowKey-single
-Copy-Item dist/FlowKey-single/FlowKey.Desktop.exe FlowKey.exe
 ```
 
-在「录制与编辑」中设置快捷键（默认 F10），按快捷键或点击「开始录制」即可开始。无需指定目标窗口，切换窗口、改变窗口尺寸或关闭原窗口都会继续记录键盘动作。再按快捷键或点击「停止录制」结束录制。
+Run `dist/FlowKey-single/FlowKey.Desktop.exe` after publishing, or copy it to the repository root as `FlowKey.exe`. `FlowKey-UI-Demo.html` is a browser-based interface preview; it does not record or control the computer.
 
-录制时，画面会实时显示每个按键的按下、长按期间的重复按下与松开，以及各动作之前的等待毫秒数，包括开始录制到第一个动作的等待。左右修饰键与功能键分别记录，只排除当前控制快捷键及FlowKey 自己回放的输入；超过 60 秒的步骤等待也会保留，最大为 2147483647 毫秒。
-
-结束非空录制后会立即弹出名称窗口。输入 1–100 个字符的脚本名称并确认后，保存脚本并进入「执行脚本」页面；没有录到步骤时不建立空脚本，也不要求命名。名称无效或保存失败会保留步骤和名称窗口，可以修正后重试；放弃录制需要另行确认。再次开始录制会建立另一份脚本，保留上一次已保存的录制。在录制页面检查已命名脚本、删除误操作、修改等待毫秒数，或编辑旧脚本已有的文字步骤；不提供添加文字步骤，修改会自动保存。页面不需要「新建脚本」「重新载入」或手动保存按钮。
-
-进入「执行脚本」后，左侧会列出所有已保存脚本，可选取、切换和删除；录制页面不显示脚本库。每个脚本保存在 `%LOCALAPPDATA%\FlowKey\scripts\<脚本编号>.json`；旧版的 `script.json` 会自动迁移。
-
-在「执行脚本」中选择脚本，再选择只执行一次、指定次数或持续执行。后两种方式可设置每轮间隔（100–60000 毫秒）；指定次数范围为 1–10000。执行方式、次数、间隔与快捷键的修改会自动保存，不需要「保存设置」。新录制的键盘脚本可切到任意普通目标窗口；旧脚本仍须符合保存的目标程序与窗口尺寸。按快捷键即可确认目标并执行；也可点击「开始执行」进入等待，再切到符合要求的目标窗口自动启动。再按一次快捷键可停止。执行页面会列出全部步骤，持续高亮当前执行步骤，并显示当前动作、轮次及轮次间隔等待状态；步骤在执行页面仅供查看。
-
-持续执行会一直重复，直到手动停止或目标窗口失焦。可选择 F8、F9、F10 或 F11；F12 是系统保留键，不在桌面版中提供。
-
-FlowKey 默认请求管理员权限，以支持同为管理员权限的目标程序。用户已确认以管理员模式运行后，貓貓 TMS 可以正常录制。源码测试宿主仍可在普通权限运行，因此保留权限差异提醒与管理员重启入口。
-
-录制敏感输入前请先结束录制；文字步骤以明文写入本地脚本。录制可跨普通权限窗口，执行时只操作一个前台目标窗口。执行中窗口失焦、关闭或尺寸变化时停止执行。
-
-## 设置执行流程
-
-左侧底部、本地脚本库提示上方的「设置」→「执行时的窗口切换」，调整后自动保存，适用于所有脚本。
-
-- 开始：选择「我来切换窗口」，或「自动切到指定窗口」。自动模式需先选择已打开的目标窗口，可用「刷新窗口」更新列表。
-- 结束：选择「回到 FlowKey」或「保持当前窗口」。自然完成、手动停止及异常停止均按此设置处理；持续执行只在停止后处理。
-- 流程预览会显示当前组合。默认保留手动切换及结束后保持当前窗口。
-- 设置保存在本地 settings.json。重新打开目标程序后按程序与完整窗口名称匹配；窗口关闭、名称变化或重名时要求重新选择。自动切换会等待窗口稳定就绪，最长等待 5 秒；窗口未开启或找不到时明确显示窗口名称并提示先开启或重新选择。Windows 拒绝自动切换时不发送按键。
-
-## 执行结果提示
-
-「设置」→「执行结果提示」可统一设置所有脚本，修改后自动保存。默认开启屏幕角落横幅与提示音；可分别开启完成对话框及目标屏幕边框，并选择横幅和边框显示 2、4、6 或 10 秒。「试听提示音」可检查当前电脑是否能播放声音。总开关关闭时，脚本结束后不显示这些提示，也不自动播放提示音；执行页面仍会保留状态文字。
-
-单次与指定次数模式会在全部轮次自然完成后提示一次；持续模式只在手动停止或中断时显示对应结果。手动停止、目标失焦或关闭及执行失败会使用不同文字，不会显示「执行完成」对话框。对话框会切换焦点并等待按下「知道了」；横幅和边框不会切换焦点。声音仍受 Windows 音量与静音设置控制；边框显示在目标窗口所在的屏幕，特殊全屏程序可能遮挡提示层。
-
-## 验证
+## 開發與驗證 / Development and verification
 
 ```powershell
 dotnet run --project FlowKey.Core.Tests/FlowKey.Core.Tests.csproj
@@ -75,6 +75,6 @@ node --check desktop.js
 ./tests/Verify-Published.ps1 -Executable dist/FlowKey-single/FlowKey.Desktop.exe
 ```
 
-若 Windows 阻止测试窗口取得前台焦点，可先在 PowerShell 执行 `$env:FLOWKEY_E2E_MANUAL_FOCUS = '1'`，再运行桌面测试，并在 120 秒内点击出现的「FlowKey E2E target」输入区。测试结束后用 `Remove-Item Env:FLOWKEY_E2E_MANUAL_FOCUS` 清除此选项。测试会实际操作快捷键、窗口、命名窗口、保存与回放；键盘录制测试从独立进程通过 Windows SendInput 发送按键，检查真实监听、实时步骤、长按期间的重复按下及回放；游戏硬件按键另以人工验收确认。
+桌面測試會在實際 Windows 視窗驗證錄製、快捷鍵、儲存與回放。設計細節請參閱[產品設計](docs/PRODUCT_DESIGN.md)及[技術設計](docs/TECHNICAL_DESIGN.md)。
 
-产品要求与技术方案分别见 [产品设计文档](docs/PRODUCT_DESIGN.md) 和 [技术方案](docs/TECHNICAL_DESIGN.md)。
+Desktop tests exercise recording, shortcuts, saving, and playback in real Windows windows. See the [product design](docs/PRODUCT_DESIGN.md) and [technical design](docs/TECHNICAL_DESIGN.md) for further details.
