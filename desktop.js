@@ -19,6 +19,7 @@
     view = next;
     $('workspace-view').hidden = next !== 'editor';
     $('execution-view').hidden = next !== 'execution';
+    $('sidebar-library').hidden = next !== 'execution';
     for (const [name, id] of [['editor', 'nav-editor'], ['execution', 'nav-execution']]) {
       const button = $(id);
       button.classList.toggle('active', name === next);
@@ -51,7 +52,7 @@
       detail.textContent = `${script.stepCount} 个步骤 · ${script.mode === 'Continuous' ? '持续' : script.mode === 'Count' ? '指定次数' : '单次'}`;
       button.append(title, detail);
       button.addEventListener('click', () => {
-        if (script.id !== state.script.id && confirmDiscard()) send('openScript', { id: script.id });
+        if (view === 'execution' && script.id !== state.script.id && confirmDiscard()) send('openScript', { id: script.id });
       });
       library.append(button);
     });
@@ -63,7 +64,23 @@
     const plan = state.script.execution || { mode: 'Once', repeatCount: 1, intervalMs: 1000 };
     $('plan-summary').textContent = executionLabel(plan);
     $('execution-script-name').textContent = state.script.name + (state.dirty ? ' · 未保存' : '');
-    $('execution-target').textContent = selected ? `${selected.process} · ${selected.title}` : '请先在录制与编辑页面选择目标窗口';
+    $('execution-target').textContent = selected ? `${selected.process} · ${selected.title} · 已确认` : '请在下方选择执行目标窗口';
+    const targetSelect = $('execution-window-select');
+    targetSelect.replaceChildren();
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = '选择执行目标窗口';
+    targetSelect.append(placeholder);
+    state.windows.forEach(item => {
+      const option = document.createElement('option');
+      option.value = item.id;
+      option.textContent = `${item.process} · ${item.title}`;
+      targetSelect.append(option);
+    });
+    targetSelect.value = state.selectedId;
+    targetSelect.disabled = state.mode !== 'ready';
+    $('execution-refresh-windows').disabled = state.mode !== 'ready';
+    $('execution-message').textContent = state.message;
     for (const mode of ['Once', 'Count', 'Continuous']) $(`mode-${mode.toLowerCase()}`).checked = plan.mode === mode;
     $('repeat-count').value = String(plan.repeatCount);
     $('repeat-count').disabled = plan.mode !== 'Count' || state.mode !== 'ready';
@@ -78,13 +95,15 @@
     $('execution-hotkey').disabled = state.mode !== 'ready';
     $('save-execution').disabled = state.mode !== 'ready';
     const active = state.mode === 'running' || state.pendingRun;
-    $('execution-start').disabled = !active && (state.mode !== 'ready' || !selected || !state.script.steps.length);
+    $('execution-start').disabled = !active && state.mode !== 'ready';
     $('execution-start').textContent = active ? '■ 停止执行' : '▶ 开始执行';
     $('execution-start').className = `button ${active ? 'danger' : 'primary'}`;
     $('execution-help').textContent = state.pendingRun
       ? '已准备执行，切回目标窗口后开始；再次点击可取消。'
       : state.mode === 'running' ? `再按 ${state.script.hotkey} 可停止执行。`
-        : `切回目标窗口按 ${state.script.hotkey} 执行当前脚本；再次按下停止。`;
+        : !selected ? '请先在上方选择执行目标窗口。'
+          : !state.script.steps.length ? '当前脚本还没有步骤，请到录制与编辑页完成录制。'
+            : `切回目标窗口按 ${state.script.hotkey} 执行当前脚本；再次按下停止。`;
     $('cycle-number').textContent = state.mode === 'running'
       ? `${state.currentIteration}${plan.mode === 'Count' ? ` / ${plan.repeatCount}` : ''}${state.waitingForNextRun ? ' · 等待下一轮' : ''}`
       : '—';
@@ -212,8 +231,8 @@
     $('finish-button').hidden = state.mode !== 'paused';
     $('save-button').disabled = state.mode !== 'ready';
     $('load-button').disabled = state.mode !== 'ready';
+    $('new-editor-script').disabled = state.mode !== 'ready';
     $('add-text').disabled = state.mode !== 'ready';
-    $('run-button').disabled = state.mode !== 'running' && (!selected || !state.script.steps.length || state.mode !== 'ready');
     const active = state.mode === 'running' || state.pendingRun;
     $('run-button').disabled = !active && (!selected || !state.script.steps.length || state.mode !== 'ready');
     $('run-button').textContent = active ? '■ 停止执行' : '▶ 执行脚本';
@@ -245,9 +264,9 @@
     $('refresh-windows').hidden = false;
     $('window-select').style.maxWidth = '240px';
     document.querySelector('.window-meta small').textContent = '请选择当前可见窗口';
-    $('sidebar-library').hidden = false;
     $('plan-summary').hidden = false;
     $('open-execution').hidden = false;
+    $('new-editor-script').hidden = false;
     $('add-text').hidden = false;
     $('script-name-row').hidden = false;
     $('add-step').hidden = true;
@@ -260,12 +279,16 @@
     }));
     $('refresh-windows').addEventListener('click', () => send('refresh'));
     $('window-select').addEventListener('change', event => send('select', { value: event.target.value }));
+    $('execution-refresh-windows').addEventListener('click', () => send('refresh'));
+    $('execution-window-select').addEventListener('change', event => send('select', { value: event.target.value }));
     $('hotkey-select').addEventListener('change', event => send('hotkey', { value: event.target.value }));
     $('execution-hotkey').addEventListener('change', event => send('hotkey', { value: event.target.value }));
     $('nav-editor').addEventListener('click', () => showView('editor'));
     $('nav-execution').addEventListener('click', () => showView('execution'));
     $('open-execution').addEventListener('click', () => showView('execution'));
-    $('new-script').addEventListener('click', () => { if (confirmDiscard()) { send('newScript'); showView('editor'); } });
+    const createScript = () => { if (confirmDiscard()) { send('newScript'); showView('editor'); } };
+    $('new-script').addEventListener('click', createScript);
+    $('new-editor-script').addEventListener('click', createScript);
     $('delete-script').addEventListener('click', () => {
       if (state && window.confirm(`确定删除「${state.script.name}」吗？此操作无法恢复。`)) send('deleteScript', { id: state.script.id });
     });
@@ -285,6 +308,7 @@
       if (value) send('text', { value });
     });
     window.chrome.webview.addEventListener('message', event => { state = event.data; render(); });
+    showView('editor');
     send('refresh');
   });
 })();

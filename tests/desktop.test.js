@@ -74,7 +74,7 @@ function desktop() {
 test('desktop displays saved scripts and supports navigation, selection, creation, and deletion', () => {
   const { get, select, sent, state, push } = desktop();
   assert.equal(sent[0].action, 'refresh');
-  assert.equal(get('sidebar-library').hidden, false);
+  assert.equal(get('sidebar-library').hidden, true);
   push(state());
   assert.equal(get('window-name').textContent, '记事本');
   assert.equal(select('.window-meta small').textContent, 'notepad · 已确认');
@@ -84,13 +84,26 @@ test('desktop displays saved scripts and supports navigation, selection, creatio
   get('nav-execution').click();
   assert.equal(get('execution-view').hidden, false);
   assert.equal(get('workspace-view').hidden, true);
-  get('nav-editor').click();
-  assert.equal(get('workspace-view').hidden, false);
+  assert.equal(get('sidebar-library').hidden, false);
   get('saved-scripts').children[1].click();
   assert.equal(sent.at(-1).action, 'openScript');
   assert.equal(sent.at(-1).id, 'b');
+  get('execution-window-select').change('123');
+  assert.equal(sent.at(-1).action, 'select');
+  assert.equal(sent.at(-1).value, '123');
+  get('execution-refresh-windows').click();
+  assert.equal(sent.at(-1).action, 'refresh');
+  get('nav-editor').click();
+  assert.equal(get('workspace-view').hidden, false);
+  assert.equal(get('sidebar-library').hidden, true);
+  get('saved-scripts').children[1].click();
+  assert.equal(sent.at(-1).action, 'refresh');
+  get('new-editor-script').click();
+  assert.equal(sent.at(-1).action, 'newScript');
+  get('nav-execution').click();
   get('new-script').click();
   assert.equal(sent.at(-1).action, 'newScript');
+  get('nav-execution').click();
   get('delete-script').click();
   assert.equal(sent.at(-1).action, 'deleteScript');
   assert.equal(sent.at(-1).id, 'a');
@@ -100,6 +113,7 @@ test('desktop protects unsaved changes when switching scripts', () => {
   const ui = desktop();
   const { get, sent, state, push } = ui;
   push(state({ dirty: true }));
+  get('nav-execution').click();
   ui.setConfirm(false);
   get('saved-scripts').children[1].click();
   get('new-script').click();
@@ -112,7 +126,10 @@ test('desktop protects unsaved changes when switching scripts', () => {
 test('execution screen saves plans and exposes run progress', () => {
   const { get, sent, state, push } = desktop();
   push(state());
+  get('nav-execution').click();
   assert.equal(get('mode-once').checked, true);
+  assert.equal(get('execution-window-select').value, '123');
+  assert.equal(get('execution-target').textContent.includes('已确认'), true);
   assert.equal(get('repeat-count').disabled, true);
   assert.equal(get('repeat-interval').disabled, true);
   get('mode-once').checked = false;
@@ -133,6 +150,9 @@ test('execution screen saves plans and exposes run progress', () => {
   assert.equal(sent.at(-1).action, 'hotkey');
   get('save-execution').click();
   assert.equal(sent.at(-1).action, 'save');
+  push(state({ message: '已保存「测试脚本」到脚本库。' }));
+  assert.equal(get('execution-view').hidden, false);
+  assert.match(get('execution-message').textContent, /已保存/);
   get('execution-start').click();
   assert.equal(sent.at(-1).action, 'run');
   push(state({ mode: 'running', currentStep: -1, currentIteration: 2, waitingForNextRun: true,
@@ -141,8 +161,13 @@ test('execution screen saves plans and exposes run progress', () => {
   assert.equal(get('execution-progress-label').textContent, '等待下一轮');
   assert.equal(get('execution-start').textContent, '■ 停止执行');
   push(state({ pendingRun: true }));
+  assert.equal(get('execution-view').hidden, false);
   assert.equal(get('execution-progress-label').textContent, '等待目标窗口');
   assert.equal(get('run-button').disabled, false);
+  push(state({ selectedId: '', message: '请先选择目标窗口。' }));
+  assert.equal(get('execution-start').disabled, false);
+  assert.equal(get('execution-message').textContent, '请先选择目标窗口。');
+  assert.match(get('execution-help').textContent, /上方选择/);
 });
 
 test('execution inputs reject out-of-range values before sending a plan', () => {
@@ -163,6 +188,7 @@ test('desktop markup contains the execution workspace and omits the three-step g
   const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   assert.match(html, /id="saved-scripts"/);
   assert.match(html, /id="execution-view"/);
+  assert.match(html, /id="execution-window-select"/);
   assert.match(html, /id="mode-continuous"/);
   assert.doesNotMatch(html, /只需三步/);
 });
