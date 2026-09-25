@@ -7,13 +7,17 @@ var checks = new (string Name, Action Run)[]
     ("corrupt file reports an error", CorruptFile),
     ("invalid save preserves old file", InvalidSavePreservesFile),
     ("recording coalesces double click and keeps delays", RecordingSteps),
-    ("session rejects overlapping runs and invalid transitions", SessionTransitions)
+    ("session rejects overlapping runs and invalid transitions", SessionTransitions),
+    ("catalog migrates, lists, updates and deletes scripts", CatalogLifecycle),
+    ("execution settings reject invalid ranges", RejectsExecutionSettings)
 };
 foreach (var check in checks)
 {
     check.Run();
     Console.WriteLine($"PASS {check.Name}");
 }
+await PlaybackModes();
+Console.WriteLine("PASS once, counted and continuous playback with cancellation");
 
 static ScriptDocument ValidScript() => new()
 {
@@ -37,9 +41,100 @@ static void RoundTrip()
         store.Save(ValidScript());
         var loaded = store.Load() ?? throw new Exception("Missing script");
         Check(loaded.Steps.Count == 4 && loaded.Steps[3].Text == "中文" && loaded.Hotkey == "F10");
+        Check(loaded.Id.Length == 32 && loaded.Execution.Mode == ExecutionMode.Once);
         Check(!File.Exists(path + ".tmp"));
     }
     finally { File.Delete(path); }
+}
+
+static void RejectsExecutionSettings()
+{
+    var script = ValidScript();
+    script.Execution.Mode = ExecutionMode.Count;
+    script.Execution.RepeatCount = 0;
+    Throws(() => ScriptValidator.Validate(script));
+    script.Execution.RepeatCount = 3;
+    script.Execution.IntervalMs = 99;
+    Throws(() => ScriptValidator.Validate(script));
+    script.Execution.IntervalMs = 60001;
+    Throws(() => ScriptValidator.Validate(script));
+    script.Execution.IntervalMs = 500;
+    script.Execution.Mode = (ExecutionMode)99;
+    Throws(() => ScriptValidator.Validate(script));
+    script.Execution.Mode = ExecutionMode.Continuous;
+    ScriptValidator.Validate(script);
+}
+
+static void CatalogLifecycle()
+{
+    var root = Path.Combine(Path.GetTempPath(), "FlowKey-catalog-test-" + Guid.NewGuid().ToString("N"));
+    try
+    {
+        Directory.CreateDirectory(root);
+        var catalog = new ScriptCatalog(Path.Combine(root, "scripts"));
+        var legacy = Path.Combine(root, "script.json");
+        var original = ValidScript();
+        new ScriptStore(legacy).Save(original);
+        Check(catalog.MigrateLegacy(legacy)?.Id == original.Id);
+        Check(File.Exists(legacy) && catalog.List().Scripts.Count == 1);
+        var second = ValidScript();
+        second.Name = "第二个脚本";
+        second.Execution.Mode = ExecutionMode.Count;
+        second.Execution.RepeatCount = 3;
+        catalog.Save(second);
+        Check(catalog.List().Scripts.Count == 2);
+        Check(catalog.Load(second.Id)?.Execution.RepeatCount == 3);
+        second.Name = "更新名称";
+        catalog.Save(second);
+        Check(catalog.Load(second.Id)?.Name == "更新名称");
+        Check(catalog.MigrateLegacy(legacy) is null);
+        Throws(() => catalog.Load("../script.json"));
+        File.WriteAllText(Path.Combine(catalog.DirectoryPath, Guid.NewGuid().ToString("N") + ".json"), "{oops");
+        Check(catalog.List().Scripts.Count == 2 && catalog.List().Errors.Count == 1);
+        Check(catalog.Delete(second.Id) && !catalog.Delete(second.Id));
+        Check(catalog.List().Scripts.Count == 1);
+    }
+    finally
+    {
+        var tempRoot = Path.GetFullPath(Path.GetTempPath());
+        var resolved = Path.GetFullPath(root);
+        if (!resolved.StartsWith(tempRoot, StringComparison.OrdinalIgnoreCase)) throw new Exception("Unexpected catalog test directory.");
+        if (Directory.Exists(resolved)) Directory.Delete(resolved, true);
+    }
+}
+
+static async Task PlaybackModes()
+{
+    var steps = new[] { new ScriptStep { Type = StepType.Key, Keys = [65] }, new ScriptStep { Type = StepType.Key, Keys = [66] } };
+    var calls = new List<(long Iteration, int Index)>();
+    var waits = new List<int>();
+    Task Execute(long iteration, int index, ScriptStep _, CancellationToken token)
+    { calls.Add((iteration, index)); return Task.CompletedTask; }
+    Task Wait(int duration, CancellationToken token)
+    { waits.Add(duration); return Task.CompletedTask; }
+
+    await PlaybackLoop.RunAsync(new ExecutionPlan(), steps, Execute, Wait, CancellationToken.None);
+    Check(calls.SequenceEqual([(1, 0), (1, 1)]) && waits.Count == 0);
+    calls.Clear();
+    var counted = new ExecutionPlan { Mode = ExecutionMode.Count, RepeatCount = 3, IntervalMs = 750 };
+    await PlaybackLoop.RunAsync(counted, steps, Execute, Wait, CancellationToken.None);
+    Check(calls.Count == 6 && calls[^1] == (3, 1) && waits.SequenceEqual([750, 750]));
+
+    calls.Clear(); waits.Clear();
+    using var stop = new CancellationTokenSource();
+    Task StopAfterThird(long iteration, int index, ScriptStep _, CancellationToken token)
+    {
+        calls.Add((iteration, index));
+        if (iteration == 3 && index == 1) stop.Cancel();
+        return Task.CompletedTask;
+    }
+    try
+    {
+        await PlaybackLoop.RunAsync(new ExecutionPlan { Mode = ExecutionMode.Continuous }, steps, StopAfterThird, Wait, stop.Token);
+        throw new Exception("Continuous run did not stop.");
+    }
+    catch (OperationCanceledException) { }
+    Check(calls.Count == 6 && waits.Count == 2);
 }
 
 static void RejectsInvalid()

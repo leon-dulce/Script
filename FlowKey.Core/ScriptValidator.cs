@@ -7,6 +7,7 @@ public static class ScriptValidator
     public static void Validate(ScriptDocument? script)
     {
         if (script is null) throw new InvalidDataException("脚本为空。");
+        if (!Guid.TryParseExact(script.Id, "N", out _)) throw new InvalidDataException("脚本编号无效。");
         if (script.Version != 1) throw new InvalidDataException("不支持此脚本版本。");
         if (string.IsNullOrWhiteSpace(script.Name) || script.Name.Length > 100)
             throw new InvalidDataException("脚本名称无效。");
@@ -14,6 +15,9 @@ public static class ScriptValidator
             script.TargetProcessPath.Length > 1024 || script.TargetTitle.Length > 512)
             throw new InvalidDataException("目标窗口信息过长。");
         if (!Hotkeys.Contains(script.Hotkey)) throw new InvalidDataException("快捷键无效。");
+        if (script.Execution is null || !Enum.IsDefined(script.Execution.Mode) ||
+            script.Execution.RepeatCount is < 1 or > 10000 || script.Execution.IntervalMs is < 100 or > 60000)
+            throw new InvalidDataException("执行模式、次数或轮次间隔无效。");
         if (script.ClientWidth is < 0 or > 16384 || script.ClientHeight is < 0 or > 16384)
             throw new InvalidDataException("窗口尺寸无效。");
         if (script.Steps is null || script.Steps.Count > 10000)
