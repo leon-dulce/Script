@@ -58,6 +58,7 @@ public partial class MainWindow : Window
         _dataDirectory = dataDirectory ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FlowKey");
         _catalog = new ScriptCatalog(Path.Combine(_dataDirectory, "scripts"));
         InitializeComponent();
+        Browser.DefaultBackgroundColor = System.Drawing.Color.FromArgb(23, 26, 32);
         try { _flowPreferences = FlowPreferences.Load(FlowSettingsPath); }
         catch (Exception error) when (error is IOException or JsonException or UnauthorizedAccessException)
         { _flowMessage = "設定未能載入，暫用手動切換：" + error.Message; }

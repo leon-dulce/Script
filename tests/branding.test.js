@@ -5,6 +5,24 @@ const path = require('node:path');
 const root = path.join(__dirname, '..');
 const read = name => fs.readFileSync(path.join(root, name), 'utf8');
 
+test('desktop workspace uses readable dark surfaces without web application badges', () => {
+  assert.doesNotMatch(read('desktop.js'), /本機應用程式/);
+  assert.doesNotMatch(read('index.html'), /class="demo-badge"|INTERACTIVE DEMO/);
+  const css = read('desktop-ui.css');
+  assert.match(css, /color-scheme:dark/);
+  assert.match(css, /\.topbar\{display:none!important\}/);
+  assert.match(read('FlowKey.Desktop/MainWindow.xaml'), /Background="#171A20"/);
+  function luminance(hex) {
+    const c = hex.match(/../g).map(v => parseInt(v, 16) / 255).map(v => v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4);
+    return c[0] * .2126 + c[1] * .7152 + c[2] * .0722;
+  }
+  for (const background of ['171a20', '222730', '293754']) {
+    for (const foreground of ['d4dbe7', 'a4adbd']) {
+      assert.ok((luminance(foreground) + .05) / (luminance(background) + .05) >= 4.5, `${foreground} on ${background}`);
+    }
+  }
+});
+
 test('demo server serves image, font and stylesheet resources with correct MIME types', () => {
   const {handle} = require('./preview-demo.cjs');
   for (const [url, type, prefix] of [['/assets/flowkey.svg','image/svg+xml','<svg'],['/branding.css','text/css; charset=utf-8','@font-face'],['/assets/NotoSerifTC.ttf','font/ttf',null]]) {

@@ -887,7 +887,7 @@ internal static class DesktopE2E
     private static void VerifyAppearance(MainWindow app)
     {
         Until(() => EvalBool(app, "document.fonts.check('600 24px \"FlowKey Serif\"','錄製與編輯') && document.querySelector('.brand img').naturalWidth>0"), "offline font or logo failed to load", 30000);
-        if (app.Icon is null || !EvalBool(app, "document.documentElement.lang==='zh-Hant' && getComputedStyle(document.querySelector('.sidebar')).backgroundColor==='rgb(255, 255, 255)'"))
+        if (app.Icon is null || !EvalBool(app, "document.documentElement.lang==='zh-Hant' && getComputedStyle(document.querySelector('.sidebar')).backgroundColor==='rgb(34, 39, 48)' && getComputedStyle(document.querySelector('.topbar')).display==='none' && !document.querySelector('.demo-badge')"))
             throw new Exception("Traditional Chinese layout or window icon missing.");
         foreach (var width in new[] {850d,1180d,1600d})
         {
@@ -903,7 +903,7 @@ internal static class DesktopE2E
         }
         app.Width = 1180;
         Eval(app, "document.getElementById('nav-editor').click()");
-        Console.WriteLine("PASS Traditional Chinese TailAdmin layout, offline serif font, shared logo/window icon, and all pages at 850/1180/1600 widths");
+        Console.WriteLine("PASS Traditional Chinese dark desktop layout, offline serif font, shared logo/window icon, and all pages at 850/1180/1600 widths");
     }
 
     private static void Post(MainWindow app, string body)

@@ -419,7 +419,6 @@
     $('run-title').textContent = '按住一次，記錄一次';
     $('hotkey-select').setAttribute('aria-label', '設定錄製開始與結束快捷鍵');
     $('recording-shortcut-note').textContent = '按一次開始，再按一次結束並命名';
-    document.querySelector('.demo-badge').textContent = '本機應用程式';
     document.querySelector('.sidebar-bottom').innerHTML = '<strong><span class="dot"></span>本地腳本庫</strong>結束錄製後，為腳本命名並確認儲存，即可在執行頁使用。';
     document.querySelector('.footer-note').textContent = '腳本與設定儲存於本機。執行中可再次按快捷鍵停止。';
     document.querySelector('.help').textContent = '按快捷鍵或開始錄製按鈕開始，再按一次結束並命名儲存。';
