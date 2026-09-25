@@ -148,6 +148,7 @@ if (!new KeyTransitionFilter().Accept(KeyboardStepFactory.Create(0x41, 0, false,
     throw new Exception("New recording inherited held keys.");
 Console.WriteLine("PASS held-key repeat suppression, overlapping keys, release/repress, modifier sides and recording reset");
 
+FlowPreferencesTests.Run();
 DesktopE2E.Run();
 
 var assetsRoot = Path.Combine(Path.GetTempPath(), "FlowKey-assets-test-" + Guid.NewGuid().ToString("N"));

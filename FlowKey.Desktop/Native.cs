@@ -27,6 +27,17 @@ internal static class Native
     [DllImport("user32.dll")] internal static extern bool IsWindowVisible(nint handle);
     [DllImport("user32.dll")] internal static extern bool IsWindow(nint handle);
     [DllImport("user32.dll")] internal static extern nint GetForegroundWindow();
+    [DllImport("user32.dll")] internal static extern bool SetForegroundWindow(nint handle);
+    [DllImport("user32.dll")] internal static extern bool IsIconic(nint handle);
+    [DllImport("user32.dll")] internal static extern bool ShowWindow(nint handle, int command);
+
+    internal static bool ActivateWindow(nint handle)
+    {
+        if (!IsWindow(handle)) return false;
+        if (IsIconic(handle)) ShowWindow(handle, 9);
+        SetForegroundWindow(handle);
+        return GetForegroundWindow() == handle;
+    }
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] internal static extern int GetWindowText(nint handle, StringBuilder buffer, int maxCount);
     [DllImport("user32.dll")] internal static extern int GetWindowTextLength(nint handle);
     [DllImport("user32.dll")] internal static extern uint GetWindowThreadProcessId(nint handle, out uint processId);

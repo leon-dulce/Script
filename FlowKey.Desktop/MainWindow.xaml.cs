@@ -25,6 +25,10 @@ public partial class MainWindow : Window
     private ScriptDocument _recordingDraft;
     private ScriptDocument? _executionScript;
     private string _workspace = "editor";
+    private FlowPreferences _flowPreferences = new();
+    private WindowInfo? _flowTargetIdentity;
+    private string _flowMessage = "修改后自动保存，适用于所有脚本。";
+    private string FlowSettingsPath => Path.Combine(_dataDirectory, "settings.json");
     private string _recordingHotkey = "F10";
     private bool _namingRequired;
     private string _namingError = "";
@@ -53,6 +57,9 @@ public partial class MainWindow : Window
         _dataDirectory = dataDirectory ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FlowKey");
         _catalog = new ScriptCatalog(Path.Combine(_dataDirectory, "scripts"));
         InitializeComponent();
+        try { _flowPreferences = FlowPreferences.Load(FlowSettingsPath); }
+        catch (Exception error) when (error is IOException or JsonException or UnauthorizedAccessException)
+        { _flowMessage = "设置未能载入，暂用手动切换：" + error.Message; }
         Loaded += OnLoaded;
         Closing += OnClosing;
         Closed += OnClosed;
@@ -138,7 +145,13 @@ public partial class MainWindow : Window
         if (message == Native.HotkeyMessage && wParam == 1)
         {
             handled = true;
+            if (_workspace == "settings") return 0;
             if (_namingRequired) { ShowNamingPrompt(); return 0; }
+            if (_workspace == "execution" && _mode == "ready")
+            {
+                if (!_flowPreferences.AutoSwitch && !_pendingRun) ConfirmForegroundTarget();
+                RequestRun(); Publish(); return 0;
+            }
             if (_mode == "ready")
             {
                 _pendingRecord = _pendingRun = false;
@@ -213,6 +226,8 @@ public partial class MainWindow : Window
         var state = new
         {
             mode = _mode, workspace = _workspace, message = _message, currentStep = _currentStep,
+            flow = new { autoSwitch = _flowPreferences.AutoSwitch, returnToApp = _flowPreferences.ReturnToApp,
+                targetTitle = _flowPreferences.TargetTitle, targetId = _flowPreferences.Resolve(_windows, _flowTargetIdentity)?.Handle.ToString() ?? "", message = _flowMessage },
             currentIteration = _currentIteration, waitingForNextRun = _waitingForNextRun,
             pendingRecord = _pendingRecord, pendingRun = _pendingRun, dirty = _dirty,
             namingRequired = _namingRequired, namingError = _namingError,
@@ -245,6 +260,7 @@ public partial class MainWindow : Window
                 case "saveRecording": SaveRecording(root.GetProperty("name").GetString()); break;
                 case "discardRecording": DiscardRecording(); break;
                 case "workspace": SetWorkspace(root.GetProperty("value").GetString()); break;
+                case "flowSettings": SetFlowSettings(root); break;
                 case "openScript": OpenScript(root.GetProperty("id").GetString()); break;
                 case "deleteScript": DeleteScript(root.GetProperty("id").GetString()); break;
                 case "select": SelectWindow(root.GetProperty("value").GetString()); break;
@@ -294,7 +310,7 @@ public partial class MainWindow : Window
 
     private void SetWorkspace(string? workspace)
     {
-        if (_mode != "ready" || _namingRequired || workspace is not ("editor" or "execution") || workspace == _workspace) return;
+        if (_mode != "ready" || _pendingRun || _namingRequired || workspace is not ("editor" or "execution" or "settings") || workspace == _workspace) return;
         if (_dirty && (_script.Steps.Count > 0 || _savedScripts.Any(s => s.Id == _script.Id)))
         {
             AutoSaveEdits();
@@ -316,7 +332,7 @@ public partial class MainWindow : Window
             if (RegisterShortcut(_recordingHotkey))
                 _message = $"设置快捷键后，按 {_recordingHotkey} 开始录制；再次按下结束并命名。";
         }
-        else
+        else if (workspace == "execution")
         {
             RefreshCatalog();
             _executionScript = _savedScripts.FirstOrDefault(s => s.Id == _executionScript?.Id) ?? _savedScripts.FirstOrDefault();
@@ -325,6 +341,29 @@ public partial class MainWindow : Window
                 _message = _executionScript is null ? "请先完成一次录制，已保存脚本会显示在左侧。" : $"已选择「{_script.Name}」，切到目标窗口按 {_script.Hotkey} 执行。";
         }
         _dirty = false;
+    }
+
+    private void SetFlowSettings(JsonElement root)
+    {
+        if (_workspace != "settings" || _mode != "ready" || _pendingRun || _namingRequired) return;
+        var next = _flowPreferences with { AutoSwitch = root.GetProperty("autoSwitch").GetBoolean(),
+            ReturnToApp = root.GetProperty("returnToApp").GetBoolean() };
+        var nextTarget = _flowTargetIdentity;
+        if (root.TryGetProperty("targetId", out var targetId))
+        {
+            var id = targetId.GetString();
+            if (string.IsNullOrEmpty(id)) { next = next with { TargetTitle = "", TargetProcess = "", TargetPath = "" }; nextTarget = null; }
+            else
+            {
+                var selected = WindowSelection.Find(Native.ListWindows(_handle), id, Native.Matches);
+                if (selected is not { } target) { _flowMessage = "窗口已关闭，请刷新后重新选择。"; return; }
+                next = next with { TargetTitle = target.Title, TargetProcess = target.ProcessName, TargetPath = target.ProcessPath };
+                nextTarget = target;
+            }
+        }
+        try { next.Save(FlowSettingsPath); _flowPreferences = next; _flowTargetIdentity = nextTarget; _flowMessage = "已自动保存，适用于所有脚本。"; }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        { _flowMessage = "保存失败，仍使用先前设置：" + error.Message; }
     }
 
     private void RefreshCatalog()
@@ -595,6 +634,18 @@ public partial class MainWindow : Window
         if (_pendingRun) { _pendingRun = false; _message = "已取消等待执行。"; Publish(); return; }
         if (_script.Steps.Count == 0 || !_savedScripts.Any(s => s.Id == _script.Id))
         { _message = "请先从左侧选择有操作步骤的已保存脚本。"; Publish(); return; }
+        if (_flowPreferences.AutoSwitch)
+        {
+            RefreshWindows();
+            _target = _flowPreferences.Resolve(_windows, _flowTargetIdentity);
+            if (_target is not { } automaticTarget)
+            { _message = "设置中的目标窗口不可用或有多个同名窗口，请在设置页重新选择。"; Publish(); return; }
+            var automaticProblem = RunPreflight(automaticTarget);
+            if (automaticProblem is not null) { _message = automaticProblem; Publish(); return; }
+            if (!Native.ActivateWindow(automaticTarget.Handle))
+            { _message = "Windows 未允许切换窗口，本次没有执行；请切到目标窗口后再次启动。"; Publish(); return; }
+            StartRun(); return;
+        }
         if (_target is null) ConfirmForegroundTarget();
         if (_target is not { } target)
         {
@@ -641,6 +692,7 @@ public partial class MainWindow : Window
 
     private async Task RunStepsAsync(WindowInfo target, CancellationTokenSource run)
     {
+        var returnToApp = _flowPreferences.ReturnToApp;
         // Use one target layout for both down and up, including cleanup after focus changes.
         var keyboardLayout = Native.GetKeyboardLayout(Native.GetWindowThreadProcessId(target.Handle, out _));
         var keyboard = new KeyboardPlayback((key, release) => Native.SendKey(key, release, layout: keyboardLayout));
@@ -684,6 +736,14 @@ public partial class MainWindow : Window
             {
                 _message = $"释放执行按键失败：{error.Message}";
                 Publish();
+            }
+            // SendInput queues events. Let the target process the final key/up before
+            // switching focus, otherwise a short script can lose its final actions.
+            if (returnToApp)
+            {
+                await Task.Delay(100);
+                if (ReferenceEquals(_playback, run) && IsVisible && !Native.ActivateWindow(_handle))
+                { _message += " 无法自动返回 FlowKey，请点击任务栏打开。"; Publish(); }
             }
             if (ReferenceEquals(_playback, run)) { _playback = null; run.Dispose(); }
             if (ReferenceEquals(_playbackKeyboard, keyboard)) _playbackKeyboard = null;

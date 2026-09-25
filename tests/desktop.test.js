@@ -537,3 +537,39 @@ test('administrator restart preserves busy recordings and explains elevated fore
   assert.equal(get('restart-admin').hidden, true);
   assert.equal(get('recording-access-warning').hidden, true);
 });
+
+
+test('settings page exposes four flow combinations and confirms changes through host', () => {
+  const {get,sent,state,push}=desktop();
+  push(state()); get('nav-settings').click();
+  assert.equal(sent.at(-1).value,'settings');
+  for(const autoSwitch of [false,true]) for(const returnToApp of [false,true]) {
+    push(state({workspace:'settings',flow:{autoSwitch,returnToApp,targetId:'123',targetTitle:'记事本',message:'已自动保存'}}));
+    assert.equal(get('settings-view').hidden,false);
+    assert.equal(get('workspace-view').hidden,true);
+    assert.equal(get('execution-view').hidden,true);
+    assert.equal(get('sidebar-library').hidden,true);
+    assert.equal(get('flow-target-panel').hidden,!autoSwitch);
+    assert.equal(get('flow-auto').checked,autoSwitch);
+    assert.equal(get('flow-return').checked,returnToApp);
+    assert.ok(get('flow-preview').textContent.includes(returnToApp ? '回到 FlowKey':'保持当前窗口'));
+    get('flow-auto').change();
+    assert.equal(sent.at(-1).action,'flowSettings');
+    assert.equal(sent.at(-1).autoSwitch,autoSwitch);
+    assert.equal(sent.at(-1).returnToApp,returnToApp);
+  }
+  get('flow-target').change('123'); assert.equal(sent.at(-1).targetId,'123');
+  get('flow-refresh').click(); assert.equal(sent.at(-1).action,'refresh');
+  push(state({workspace:'settings',flow:{autoSwitch:true,returnToApp:false,targetId:'',targetTitle:'旧窗口',message:'保存失败'}}));
+  assert.match(get('flow-target-note').textContent,/未找到/);
+  assert.equal(get('flow-save-status').textContent,'保存失败');
+});
+
+test('settings cannot interrupt recording, execution, pending start or naming', () => {
+  const {get,sent,state,push}=desktop();
+  for(const update of [{mode:'recording'},{mode:'running'},{pendingRun:true},{namingRequired:true}]) {
+    push(state({...update,workspace:'settings'})); const before=sent.length;
+    get('nav-settings').click(); get('flow-auto').change(); get('flow-target').change('123'); get('flow-refresh').click();
+    assert.equal(sent.length,before);
+  }
+});

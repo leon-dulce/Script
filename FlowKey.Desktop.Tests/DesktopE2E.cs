@@ -51,8 +51,8 @@ internal static class DesktopE2E
         var targetName = "FlowKey E2E target " + Guid.NewGuid().ToString("N");
         var editor = new TextBox { FontSize = 18, AcceptsReturn = true };
         var keyEvents = new List<(Key Key, bool Up)>();
-        editor.PreviewKeyDown += (_, e) => keyEvents.Add((ActualKey(e), false));
-        editor.PreviewKeyUp += (_, e) => keyEvents.Add((ActualKey(e), true));
+        editor.PreviewKeyDown += (_, e) => { keyEvents.Add((ActualKey(e), false)); if (ActualKey(e) is Key.LeftAlt or Key.RightAlt) e.Handled = true; };
+        editor.PreviewKeyUp += (_, e) => { keyEvents.Add((ActualKey(e), true)); if (ActualKey(e) is Key.LeftAlt or Key.RightAlt) e.Handled = true; };
         var target = new Window { Title = targetName, Width = 650, Height = 400, Content = editor };
         var app = new MainWindow(root);
         var loaded = false;
@@ -108,6 +108,7 @@ internal static class DesktopE2E
                 throw new Exception("Invalid recording name was accepted by the host or discarded its steps.");
             ConfirmRecordingName(app, "E2E XY");
             WaitForNamedSave(app, catalog, firstId, "E2E XY", 1);
+            VerifyWindowFlowSettings(app, target, editor);
             Eval(app, "document.getElementById('nav-editor').click()");
             Until(() => EvalBool(app, "!document.getElementById('workspace-view').hidden"), "saved recording did not reopen for editing");
             SetRecordedDelay(app, 0, 400);
@@ -557,6 +558,64 @@ internal static class DesktopE2E
         catalog.List().Scripts.Count == scriptCount && catalog.Load(id)?.Name == name && CurrentScript(app).Id == id &&
         EvalBool(app, "!document.getElementById('recording-name-dialog').open && !document.getElementById('execution-view').hidden"),
         "confirming a recording name did not save that draft and show it in execution");
+
+    private static void VerifyWindowFlowSettings(MainWindow app, Window target, TextBox editor)
+    {
+        var id = new WindowInteropHelper(target).Handle.ToString();
+        foreach (var automatic in new[] { false, true })
+        foreach (var back in new[] { false, true })
+        {
+            Eval(app, "document.getElementById('nav-settings').click()");
+            Until(() => EvalBool(app, "!document.getElementById('settings-view').hidden"), "settings page did not open");
+            Post(app, "{action:'flowSettings',autoSwitch:" + automatic.ToString().ToLowerInvariant() +
+                ",returnToApp:" + back.ToString().ToLowerInvariant() + ",targetId:'" + id + "'}");
+            Until(() => EvalBool(app, "document.getElementById('flow-auto').checked===" + automatic.ToString().ToLowerInvariant() +
+                " && document.getElementById('flow-return').checked===" + back.ToString().ToLowerInvariant()), "flow settings not confirmed");
+            Eval(app, "document.getElementById('nav-execution').click()");
+            Until(() => EvalBool(app, "!document.getElementById('execution-view').hidden"), "execution page did not reopen");
+            editor.Clear();
+            ActivateWindow(app);
+            Eval(app, "document.getElementById('execution-start').click()");
+            if (!automatic)
+            {
+                Until(() => EvalBool(app, "document.getElementById('execution-progress-label').textContent==='等待目标窗口'"), "manual flow did not wait");
+                if (editor.Text.Length != 0 || Native.GetForegroundWindow() != new WindowInteropHelper(app).Handle)
+                    throw new Exception("Manual flow switched or sent keys before the user switched.");
+                ActivateTarget(target, editor);
+            }
+            try { Until(() => editor.Text == "XY" && Text(app, "status-text") == "就绪，等待操作", "flow did not finish playback", 10000); }
+            catch (TimeoutException) { throw new Exception($"Flow auto={automatic} return={back}: text={editor.Text}, status={Text(app, "status-text")}, message={Text(app, "execution-message")}"); }
+            var expected = back ? new WindowInteropHelper(app).Handle : new WindowInteropHelper(target).Handle;
+            Until(() => Native.GetForegroundWindow() == expected, "flow completion left the wrong foreground window");
+        }
+        var originalDelay = CurrentScript(app).Steps[0].DelayMs;
+        CurrentScript(app).Steps[0].DelayMs = 3000;
+        ActivateWindow(app);
+        editor.Clear();
+        Eval(app, "document.getElementById('execution-start').click()");
+        Until(() => Text(app, "status-text") == "正在执行脚本", "return-on-stop test did not start");
+        Eval(app, "document.getElementById('execution-start').click()");
+        Until(() => Native.GetForegroundWindow() == new WindowInteropHelper(app).Handle && Text(app, "status-text") == "就绪，等待操作",
+            "manual stop did not return to FlowKey");
+        if (editor.Text.Length != 0) throw new Exception("Stopped script continued sending keys.");
+        CurrentScript(app).Steps[0].DelayMs = originalDelay;
+        Eval(app, "document.getElementById('nav-settings').click()");
+        Until(() => EvalBool(app, "!document.getElementById('settings-view').hidden"), "settings page unavailable");
+        var closedTarget = new Window { Title = "FlowKey closed flow target", Width = 200, Height = 100 };
+        closedTarget.Show();
+        Post(app, "{action:'flowSettings',autoSwitch:true,returnToApp:false,targetId:'" + new WindowInteropHelper(closedTarget).Handle + "'}");
+        closedTarget.Close();
+        Eval(app, "document.getElementById('nav-execution').click()");
+        ActivateWindow(app);
+        editor.Clear();
+        Eval(app, "document.getElementById('execution-start').click()");
+        Until(() => Text(app, "execution-message").Contains("目标窗口不可用"), "closed automatic target did not report failure");
+        if (editor.Text.Length != 0 || Text(app, "status-text") != "就绪，等待操作") throw new Exception("Closed target started execution.");
+        Eval(app, "document.getElementById('nav-settings').click()");
+        Post(app, "{action:'flowSettings',autoSwitch:false,returnToApp:false,targetId:''}");
+        Eval(app, "document.getElementById('nav-execution').click()");
+        Console.WriteLine("PASS Windows settings page and four start/end flows; closed automatic target never sends keys");
+    }
 
     private static void VerifyQAndAltReplay(Window target, TextBox editor)
     {

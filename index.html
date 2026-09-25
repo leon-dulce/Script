@@ -41,6 +41,7 @@
       <nav class="nav">
         <button class="active" id="nav-editor" type="button" aria-current="page"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/></svg><span>录制与编辑</span></button>
         <button id="nav-execution" type="button" data-toast="执行设置请在桌面版打开。"><svg viewBox="0 0 24 24"><path d="m7 4 12 8-12 8V4Z"/></svg><span>执行脚本</span></button>
+        <button id="nav-settings" type="button"><span aria-hidden="true">⚙</span><span>设置</span></button>
       </nav>
       <div class="sidebar-library" id="sidebar-library" hidden><div class="library-title"><span>已保存脚本</span><span id="library-count">0</span></div><div class="saved-scripts" id="saved-scripts"></div><div class="library-actions"><button id="delete-script" type="button">删除当前脚本</button></div></div>
       <div class="sidebar-bottom"><strong><span class="dot"></span>本地模式</strong>脚本仅保存在当前浏览器中。这个页面展示产品界面与交互。</div>
@@ -96,12 +97,32 @@
           </div>
           <section class="card pad play-panel" aria-labelledby="execution-shortcut-title"><div class="card-header"><div><h2 class="card-title" id="execution-shortcut-title">快捷键与进度</h2><p class="card-note">按一次启动，再按一次停止</p></div><span class="card-label">02 / 控制</span></div>
             <label class="card-label" for="execution-hotkey">当前脚本快捷键</label><select id="execution-hotkey" class="execution-hotkey" aria-label="执行快捷键"><option>F10</option><option>F8</option><option>F9</option><option>F11</option></select>
-            <div class="execution-script"><small id="execution-target">在目标窗口按快捷键，即可确认窗口并执行</small><details class="optional-target"><summary>手动指定目标窗口（可选）</summary><div class="execution-window-picker"><select id="execution-window-select" aria-label="选择执行目标窗口"><option value="">自动使用快捷键所在窗口</option></select><button class="muted-link" id="execution-refresh-windows" type="button">刷新</button></div></details><p class="execution-message" id="execution-message" role="status" aria-live="polite"></p></div>
+            <div class="execution-script"><small id="execution-target">在目标窗口按快捷键，即可确认窗口并执行</small><details class="optional-target" id="execution-optional-target"><summary>手动指定目标窗口（可选）</summary><div class="execution-window-picker"><select id="execution-window-select" aria-label="选择执行目标窗口"><option value="">自动使用快捷键所在窗口</option></select><button class="muted-link" id="execution-refresh-windows" type="button">刷新</button></div></details><p class="execution-message" id="execution-message" role="status" aria-live="polite"></p></div>
             <p class="help" id="execution-help">在目标窗口按快捷键开始，再按一次停止。</p><div class="cycle-status"><span>当前轮次</span><strong id="cycle-number">—</strong></div>
             <div class="progress"><span id="execution-progress-label">准备就绪</span><span id="execution-progress-fraction">0 / 0</span></div><div class="track"><div id="execution-progress-fill"></div></div>
           </section>
         </div>
       </div>
+      <section id="settings-view" hidden aria-labelledby="settings-title">
+        <div class="title-row"><div><p class="eyebrow">PREFERENCES</p><h1 id="settings-title">设置</h1><p class="subtitle">让脚本按你的习惯开始与结束。设置适用于所有脚本。</p></div></div>
+        <section class="card pad" aria-labelledby="flow-title">
+          <div class="card-header"><div><h2 class="card-title" id="flow-title">执行时的窗口切换</h2><p class="card-note">分别选择开始与结束方式，自由组合。</p></div></div>
+          <h3 class="card-title">开始执行时</h3>
+          <div class="mode-grid" style="grid-template-columns:repeat(2,minmax(0,1fr))" role="radiogroup" aria-label="开始执行时">
+            <label class="mode-choice"><input id="flow-manual" type="radio" name="flow-start" checked><strong>我来切换窗口</strong><small>按开始执行后等待，切到目标窗口才运行。</small></label>
+            <label class="mode-choice"><input id="flow-auto" type="radio" name="flow-start"><strong>自动切到指定窗口</strong><small>按开始执行，FlowKey 帮你切换并运行。</small></label>
+          </div>
+          <div id="flow-target-panel" class="execution-script" hidden><label for="flow-target">指定窗口</label><div class="execution-window-picker"><select id="flow-target"><option value="">请选择已打开的窗口</option></select><button class="muted-link" id="flow-refresh" type="button">刷新窗口</button></div><p class="card-note" id="flow-target-note">请先打开要操作的程序。</p></div>
+          <h3 class="card-title" style="margin-top:26px">执行结束或停止后</h3>
+          <div class="mode-grid" style="grid-template-columns:repeat(2,minmax(0,1fr))" role="radiogroup" aria-label="执行结束后">
+            <label class="mode-choice"><input id="flow-return" type="radio" name="flow-end"><strong>回到 FlowKey</strong><small>查看执行结果，方便继续操作。</small></label>
+            <label class="mode-choice"><input id="flow-stay" type="radio" name="flow-end" checked><strong>保持当前窗口</strong><small>结束后不切换，继续使用目标程序。</small></label>
+          </div>
+          <div class="execution-summary" style="margin-top:24px"><strong>你的操作流程</strong><p id="flow-preview" aria-live="polite"></p></div>
+          <p class="card-note" id="flow-save-status" role="status"></p>
+          <p class="card-note">持续执行会在按停止后按此设置处理。目标窗口关闭或切换失败时，不会向其他窗口发送按键。</p>
+        </section>
+      </section>
       <div class="footer-note"><span>✦</span> 界面演示版 · 操作和窗口均为模拟，不会录制或控制你的电脑</div>
     </main>
   </div>

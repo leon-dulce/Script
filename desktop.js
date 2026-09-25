@@ -24,8 +24,9 @@
     view = next;
     $('workspace-view').hidden = next !== 'editor';
     $('execution-view').hidden = next !== 'execution';
+    $('settings-view').hidden = next !== 'settings';
     $('sidebar-library').hidden = next !== 'execution';
-    for (const [name, id] of [['editor', 'nav-editor'], ['execution', 'nav-execution']]) {
+    for (const [name, id] of [['editor', 'nav-editor'], ['execution', 'nav-execution'], ['settings', 'nav-settings']]) {
       const button = $(id);
       button.classList.toggle('active', name === next);
       if (name === next) button.setAttribute('aria-current', 'page');
@@ -37,6 +38,31 @@
     if (isBusy() || view === next) return;
     showView(next);
     send('workspace', { value: next });
+  }
+
+  function renderFlowSettings() {
+    const flow = state.flow || { autoSwitch: false, returnToApp: false, targetId: '', targetTitle: '', message: '修改后自动保存，适用于所有脚本。' };
+    $('flow-auto').checked = flow.autoSwitch;
+    $('flow-manual').checked = !flow.autoSwitch;
+    $('flow-return').checked = flow.returnToApp;
+    $('flow-stay').checked = !flow.returnToApp;
+    for (const id of ['flow-auto', 'flow-manual', 'flow-return', 'flow-stay', 'flow-target', 'flow-refresh']) $(id).disabled = isBusy();
+    $('flow-target-panel').hidden = !flow.autoSwitch;
+    const picker = $('flow-target');
+    picker.replaceChildren();
+    const empty = document.createElement('option'); empty.value = ''; empty.textContent = '请选择已打开的窗口'; picker.append(empty);
+    for (const item of state.windows) { const option = document.createElement('option'); option.value = item.id; option.textContent = item.process + ' · ' + item.title; picker.append(option); }
+    picker.value = flow.targetId;
+    $('flow-target-note').textContent = flow.targetTitle && !flow.targetId ? '上次选择：' + flow.targetTitle + '。窗口未找到或有重名，请刷新后选择。' : '记住窗口名称与程序；程序重新打开后会尝试重新匹配。';
+    $('flow-preview').textContent = '开始执行 → ' + (flow.autoSwitch ? '自动切到' + (flow.targetTitle || '指定窗口（待选择）') : '等待你切到目标窗口') + ' → 运行脚本 → ' + (flow.returnToApp ? '回到 FlowKey' : '保持当前窗口');
+    $('flow-save-status').textContent = flow.message;
+  }
+
+  function submitFlowSettings(targetChanged = false) {
+    if (view !== 'settings' || isBusy()) return;
+    const fields = { autoSwitch: !!$('flow-auto').checked, returnToApp: !!$('flow-return').checked };
+    if (targetChanged) fields.targetId = $('flow-target').value;
+    send('flowSettings', fields);
   }
 
   function renderLibrary() {
@@ -90,7 +116,8 @@
       targetSelect.append(option);
     });
     targetSelect.value = state.selectedId;
-    targetSelect.disabled = settingsDisabled;
+    targetSelect.disabled = settingsDisabled || !!state.flow?.autoSwitch;
+    $('execution-optional-target').hidden = !!state.flow?.autoSwitch;
     $('execution-refresh-windows').disabled = settingsDisabled;
     $('execution-message').textContent = state.message;
     for (const mode of ['Once', 'Count', 'Continuous']) {
@@ -135,6 +162,10 @@
           : state.pendingRun ? '等待目标窗口进入前台'
             : state.mode === 'running' ? '正在开始执行'
               : '等待执行，启动后会自动跟随当前步骤';
+    if (state.flow?.autoSwitch) {
+      $('execution-target').textContent = '自动切换目标：' + (state.flow.targetTitle || '请先到设置页选择窗口');
+      if (!active) $('execution-help').textContent = '开始后自动切换到指定窗口；结束后' + (state.flow.returnToApp ? '返回 FlowKey。' : '保持当前窗口。');
+    }
     renderSteps('execution-steps', steps, false);
   }
 
@@ -319,7 +350,7 @@
   }
 
   function render() {
-    if (state.workspace === 'editor' || state.workspace === 'execution') showView(state.workspace);
+    if (['editor', 'execution', 'settings'].includes(state.workspace)) showView(state.workspace);
     const selected = state.windows.find(item => item.id === state.selectedId);
     const select = $('window-select');
     select.replaceChildren();
@@ -340,6 +371,8 @@
     $('script-name').disabled = state.mode !== 'ready';
     $('hotkey-select').disabled = isBusy();
     $('nav-editor').disabled = isBusy();
+    $('nav-settings').disabled = isBusy();
+    renderFlowSettings();
     $('nav-execution').disabled = isBusy();
     $('status-text').textContent = state.namingRequired ? '录制结束，等待命名保存' : ({ ready: '就绪，等待操作', recording: '正在录制', paused: '录制已暂停', running: '正在执行脚本' })[state.mode] || '错误';
     $('status-hint').textContent = state.message;
@@ -398,6 +431,10 @@
     $('execution-hotkey').addEventListener('change', event => send('hotkey', { value: event.target.value }));
     $('nav-editor').addEventListener('click', () => navigate('editor'));
     $('nav-execution').addEventListener('click', () => navigate('execution'));
+    $('nav-settings').addEventListener('click', () => navigate('settings'));
+    for (const id of ['flow-auto', 'flow-manual', 'flow-return', 'flow-stay']) $(id).addEventListener('change', () => submitFlowSettings());
+    $('flow-target').addEventListener('change', () => submitFlowSettings(true));
+    $('flow-refresh').addEventListener('click', () => { if (!isBusy()) send('refresh'); });
     $('delete-script').addEventListener('click', () => {
       if (view === 'execution' && !isBusy() && hasSavedScript() && window.confirm(`确定删除「${state.script.name}」吗？此操作无法恢复。`))
         send('deleteScript', { id: state.script.id });
