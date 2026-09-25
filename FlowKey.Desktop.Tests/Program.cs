@@ -11,11 +11,11 @@ if (typeof(MainWindow).GetConstructor(Type.EmptyTypes) is null)
 Console.WriteLine("PASS WPF startup can construct MainWindow");
 
 var desktopAssembly = typeof(MainWindow).Assembly;
-if (desktopAssembly.GetName().Version != new Version(1, 0, 1, 0) ||
-    desktopAssembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion != "1.0.1 Stable" ||
-    desktopAssembly.GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version != "1.0.1.0")
-    throw new Exception("Desktop assembly does not identify the 1.0.1 Stable release.");
-Console.WriteLine("PASS desktop assembly carries 1.0.1 Stable version metadata");
+if (desktopAssembly.GetName().Version != new Version(1, 0, 2, 0) ||
+    desktopAssembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion != "1.0.2 Stable" ||
+    desktopAssembly.GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version != "1.0.2.0")
+    throw new Exception("Desktop assembly does not identify the 1.0.2 Stable release.");
+Console.WriteLine("PASS desktop assembly carries 1.0.2 Stable version metadata");
 
 if (Marshal.SizeOf<Native.Input>() != 40) throw new Exception("SendInput layout must be 40 bytes on x64.");
 if (Marshal.SizeOf<Native.KeyboardData>() != 24) throw new Exception("Keyboard hook layout mismatch.");
@@ -140,6 +140,43 @@ if (ProcessAccess.TryRestart("FlowKey.exe", "F10", out _, _ => false) ||
 Console.WriteLine("PASS limited privilege inspection, mismatch warning, UAC request, cancellation, and launch failure handling");
 
 KeyboardPlaybackTests.Run();
+
+var timeline = new PlaybackTimeline();
+if (timeline.NextDelay(0, 0) != TimeSpan.Zero ||
+    timeline.NextDelay(50, 10) != TimeSpan.FromMilliseconds(40) ||
+    timeline.NextDelay(50, 115) != TimeSpan.Zero)
+    throw new Exception("Playback did not schedule against cumulative recorded time.");
+timeline.Reset();
+if (timeline.NextDelay(30000, 0) != TimeSpan.FromSeconds(30) ||
+    timeline.NextDelay(0, 30100) != TimeSpan.Zero)
+    throw new Exception("Long hold or next-run timing was wrong.");
+Console.WriteLine("PASS cumulative playback timing, late repeats, long holds and reset");
+var physicalStop = new Native.KeyboardData { VkCode = 0x79 };
+if (!PlaybackStopCapture.ShouldStop(0, Native.KeyDown, physicalStop, 0x79) ||
+    !PlaybackStopCapture.ShouldStop(0, Native.SysKeyDown, physicalStop, 0x79) ||
+    !PlaybackStopCapture.ShouldSuppress(0, Native.SysKeyUp, physicalStop, 0x79) ||
+    PlaybackStopCapture.ShouldStop(0, Native.SysKeyUp, physicalStop, 0x79) ||
+    PlaybackStopCapture.ShouldStop(-1, Native.SysKeyDown, physicalStop, 0x79) ||
+    PlaybackStopCapture.ShouldSuppress(0, Native.SysKeyDown, physicalStop, 0x78) ||
+    PlaybackStopCapture.ShouldStop(0, Native.SysKeyDown, physicalStop, 0x78) ||
+    PlaybackStopCapture.ShouldStop(0, Native.SysKeyDown,
+        new Native.KeyboardData { VkCode = 0x79, ExtraInfo = Native.ReplayInputTag }, 0x79))
+    throw new Exception("Physical stop shortcut did not filter modifier/system, release or replay events correctly.");
+try { using var invalidStop = new PlaybackStopCapture(0, () => { }); throw new Exception("Invalid stop shortcut accepted."); }
+catch (ArgumentOutOfRangeException) { }
+Console.WriteLine("PASS physical stop key recognizes Alt/system downs and rejects release, wrong key and own replay");
+var recordingThrottle = new RecordingPublishThrottle();
+recordingThrottle.MarkChanged();
+if (!recordingThrottle.ShouldPublish(1000) || recordingThrottle.ShouldPublish(1500))
+    throw new Exception("First recording update was delayed or repeated without changes.");
+recordingThrottle.MarkChanged();
+if (recordingThrottle.ShouldPublish(1499) || !recordingThrottle.ShouldPublish(1500) ||
+    recordingThrottle.ShouldPublish(2000))
+    throw new Exception("A final recording event was not published after the throttle window.");
+recordingThrottle.MarkChanged();
+recordingThrottle.Reset();
+if (recordingThrottle.ShouldPublish(2500)) throw new Exception("A new recording inherited an old pending update.");
+Console.WriteLine("PASS recording preview publishes the trailing event after throttling and resets between recordings");
 
 var transitions = new KeyTransitionFilter();
 bool Transition(uint key, bool up = false) => transitions.Accept(KeyboardStepFactory.Create(key, 0, up, 0x79)!);

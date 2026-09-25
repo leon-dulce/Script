@@ -10,6 +10,7 @@
   let view = 'editor';
   let lastHighlightedStep = '';
   let lastRecordedStep = '';
+  let highlightedExecutionRow = null;
 
   const isBusy = () => !state || state.mode !== 'ready' || state.pendingRecord || state.pendingRun || state.namingRequired;
   const hasSavedScript = () => state.savedScripts.some(script => script.id === state.script.id);
@@ -171,6 +172,14 @@
         : !saved ? '請從左側選擇要執行的已儲存腳本。'
           : !state.script.steps.length ? '這個腳本還沒有步驟，暫時無法執行。'
             : `在目標視窗按 ${state.script.hotkey} 開始執行；再次按下停止。也可點選「開始執行」後切回目標視窗。`;
+    renderExecutionProgress();
+    renderSteps('execution-steps', saved ? state.script.steps : [], false);
+  }
+
+  function renderExecutionProgress() {
+    const saved = hasSavedScript();
+    const plan = state.script.execution;
+    const active = state.mode === 'running' || state.pendingRun;
     $('cycle-number').textContent = state.mode === 'running'
       ? `${state.currentIteration}${plan.mode === 'Count' ? ` / ${plan.repeatCount}` : ''}${state.waitingForNextRun ? ' · 等待下一輪' : ''}`
       : '—';
@@ -191,7 +200,6 @@
       $('execution-target').textContent = '自動切換目標：' + (state.flow.targetTitle || '請先到設定頁選擇視窗');
       if (!active) $('execution-help').textContent = '開始後自動切換到指定視窗；結束後' + (state.flow.returnToApp ? '返回 FlowKey。' : '保持當前視窗。');
     }
-    renderSteps('execution-steps', steps, false);
   }
 
   function submitExecution() {
@@ -250,6 +258,7 @@
   function renderSteps(containerId, steps, editable) {
     const container = $(containerId);
     container.replaceChildren();
+    if (!editable) highlightedExecutionRow = null;
     if (!steps.length) {
       const empty = document.createElement('div');
       empty.className = 'empty';
@@ -261,6 +270,7 @@
       const row = document.createElement('div');
       row.className = `step${current ? ' current' : ''}`;
       if (current) row.setAttribute('aria-current', 'step');
+      if (current) highlightedExecutionRow = row;
       const number = document.createElement('span');
       number.className = 'step-number';
       number.textContent = String(index + 1).padStart(2, '0');
@@ -482,7 +492,32 @@
       if (window.confirm('放棄這次錄製後，剛才的步驟就不會保留。確定不儲存嗎？')) send('discardRecording');
       else $('recording-name-input').focus();
     });
-    window.chrome.webview.addEventListener('message', event => { state = event.data; render(); });
+    window.chrome.webview.addEventListener('message', event => {
+      if (event.data.progress) {
+        if (!state || state.mode !== 'running') return;
+        state.currentStep = event.data.currentStep;
+        state.currentIteration = event.data.currentIteration;
+        state.waitingForNextRun = event.data.waitingForNextRun;
+        renderExecutionProgress();
+        if (highlightedExecutionRow) {
+          highlightedExecutionRow.classList.remove('current');
+          highlightedExecutionRow.removeAttribute('aria-current');
+          highlightedExecutionRow = null;
+        }
+        if (!state.waitingForNextRun && state.currentStep >= 0) {
+          const row = $('execution-steps').children[state.currentStep];
+          if (row) {
+            row.classList.add('current');
+            row.setAttribute('aria-current', 'step');
+            highlightedExecutionRow = row;
+            if (view === 'execution') row.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+          }
+        }
+        return;
+      }
+      state = event.data;
+      render();
+    });
     showView('editor');
     send('refresh');
   });

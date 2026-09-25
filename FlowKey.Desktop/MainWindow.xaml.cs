@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -47,6 +46,9 @@ public partial class MainWindow : Window
     private long _currentIteration;
     private CancellationTokenSource? _playback;
     private KeyboardPlayback? _playbackKeyboard;
+    private PlaybackStopCapture? _playbackStopCapture;
+    private readonly RecordingPublishThrottle _recordingPublishThrottle = new();
+    private long _lastPlaybackProgressTick;
     private readonly bool _elevated = ProcessAccess.IsElevated(Environment.ProcessId) == true;
     private string _recordingAccessWarning = "";
     private nint _accessForeground;
@@ -167,6 +169,8 @@ public partial class MainWindow : Window
     {
         StopHooks();
         _playback?.Cancel();
+        _playbackStopCapture?.Dispose();
+        _playbackStopCapture = null;
         _completionOverlay?.Close();
         ReleasePlaybackKeys();
         if (_handle != 0) Native.UnregisterHotKey(_handle, 1);
@@ -276,6 +280,19 @@ public partial class MainWindow : Window
             script = _script
         };
         Browser.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(state, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
+    }
+
+    private void PublishPlaybackProgress(bool force = false)
+    {
+        if (!_pageReady || Browser.CoreWebView2 is null) return;
+        var tick = Environment.TickCount64;
+        if (!force && tick - _lastPlaybackProgressTick < 100) return;
+        _lastPlaybackProgressTick = tick;
+        Browser.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new
+        {
+            progress = true, currentStep = _currentStep, currentIteration = _currentIteration,
+            waitingForNextRun = _waitingForNextRun
+        }));
     }
 
     private void OnWebMessage(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
@@ -561,6 +578,7 @@ public partial class MainWindow : Window
         _accessForeground = 0;
         _recordingAccessWarning = "";
         _recordedInputs.Clear();
+        _recordingPublishThrottle.Reset();
         try { _keyboardCapture = new KeyboardCapture(_hotkeyCode); }
         catch (InvalidOperationException error) { _message = error.Message; Publish(); return; }
         _recorder.Reset(_keyboardCapture.StartedAt);
@@ -651,11 +669,15 @@ public partial class MainWindow : Window
     {
         if (_keyboardCapture is { } capture)
             while (capture.TryDequeue(out var item)) _recordedInputs.Enqueue(item);
-        if (_mode != "recording" || _recordedInputs.Count == 0) return;
+        if (_mode != "recording") return;
+        var changed = _recordedInputs.Count > 0;
         while (_recordedInputs.TryDequeue(out var captured))
             _recorder.Add(_script.Steps, captured.Step, captured.Tick);
-        _dirty = true;
-        Publish();
+        if (changed) { _dirty = true; _recordingPublishThrottle.MarkChanged(); }
+        if (_recordingPublishThrottle.ShouldPublish(Environment.TickCount64))
+        {
+            Publish();
+        }
     }
 
     private bool IsTargetReady(WindowInfo target) => Native.Matches(target) && Native.SameSize(target) && Native.GetForegroundWindow() == target.Handle;
@@ -767,7 +789,14 @@ public partial class MainWindow : Window
         var problem = RunPreflight(target);
         if (problem is not null) { _message = problem; Publish(); return; }
         if (Native.GetForegroundWindow() != target.Handle) { _message = "請先切到要操作的視窗，再開始執行。"; Publish(); return; }
+        try
+        {
+            _playbackStopCapture = new PlaybackStopCapture(_hotkeyCode,
+                () => Dispatcher.BeginInvoke(() => StopRun("已停止執行。")));
+        }
+        catch (InvalidOperationException error) { _message = error.Message; Publish(); return; }
         _playback = new CancellationTokenSource();
+        _lastPlaybackProgressTick = 0;
         _runResult = null;
         _session.BeginRun(); _currentStep = -1; _currentIteration = 0; _waitingForNextRun = false;
         _message = "正在執行；再按快捷鍵可停止。";
@@ -783,6 +812,7 @@ public partial class MainWindow : Window
         var keyboardLayout = Native.GetKeyboardLayout(Native.GetWindowThreadProcessId(target.Handle, out _));
         var keyboard = new KeyboardPlayback((key, release) => Native.SendKey(key, release, layout: keyboardLayout));
         _playbackKeyboard = keyboard;
+        var schedule = new PlaybackTimeline();
         try
         {
             await PlaybackLoop.RunAsync(_script.Execution, _script.Steps,
@@ -793,8 +823,8 @@ public partial class MainWindow : Window
                     _currentIteration = iteration;
                     _currentStep = index;
                     _waitingForNextRun = false;
-                    Publish();
-                    await Task.Delay(step.DelayMs, cancellation);
+                    PublishPlaybackProgress();
+                    await Task.Delay(schedule.NextDelay(step.DelayMs), cancellation);
                     cancellation.ThrowIfCancellationRequested();
                     if (!IsTargetReady(target))
                     { StopRun("目標視窗發生變化，已停止執行。", result: RunResult.Interrupted); cancellation.ThrowIfCancellationRequested(); }
@@ -805,8 +835,9 @@ public partial class MainWindow : Window
                 {
                     _currentStep = -1;
                     _waitingForNextRun = true;
-                    Publish();
+                    PublishPlaybackProgress(force: true);
                     await Task.Delay(interval, cancellation);
+                    schedule.Reset();
                     cancellation.ThrowIfCancellationRequested();
                     if (!IsTargetReady(target))
                     { StopRun("目標視窗發生變化，已停止執行。", result: RunResult.Interrupted); cancellation.ThrowIfCancellationRequested(); }
@@ -834,6 +865,8 @@ public partial class MainWindow : Window
             }
             if (ReferenceEquals(_playback, run)) { _playback = null; run.Dispose(); }
             if (ReferenceEquals(_playbackKeyboard, keyboard)) _playbackKeyboard = null;
+            _playbackStopCapture?.Dispose();
+            _playbackStopCapture = null;
             if (_runResult is { } result) ShowRunResult(target.Handle, result, scriptName, _currentIteration);
             _runResult = null;
         }

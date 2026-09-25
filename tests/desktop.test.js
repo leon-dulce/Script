@@ -633,6 +633,30 @@ test('settings navigation sits immediately above the local library footer', () =
   assert.equal((html.match(/id="nav-settings"/g)||[]).length,1);
   assert.match(html, /\.sidebar-settings\{margin-top:auto;/);
 });
+
+test('long playback progress updates the active row without rebuilding hundreds of steps', () => {
+  const {get, state, push} = desktop();
+  const steps = Array.from({length: 600}, (_, index) => ({type:'Key', keys:[0xA4],
+    keyAction:index === 599 ? 'Up' : 'Down', delayMs:50}));
+  push(state({workspace:'execution', mode:'running', currentStep:0,
+    script:{...state().script,steps}}));
+  const rows = get('execution-steps').children;
+  assert.equal(rows.length, 600);
+  for (const currentStep of [1, 100, 300, 599]) {
+    push({progress:true,currentStep,currentIteration:1,waitingForNextRun:false});
+    assert.equal(get('execution-steps').children, rows);
+    assert.equal(get('execution-progress-fraction').textContent, `${currentStep + 1} / 600`);
+    assert.ok(rows[currentStep].classes.has('current'));
+  }
+  push({progress:true,currentStep:-1,currentIteration:1,waitingForNextRun:true});
+  assert.equal(get('execution-progress-label').textContent,'等待下一輪');
+  assert.ok(!rows[599].classes.has('current'));
+  push(state({workspace:'execution',mode:'ready',script:{...state().script,steps}}));
+  const readyRows = get('execution-steps').children;
+  push({progress:true,currentStep:300,currentIteration:2,waitingForNextRun:false});
+  assert.equal(get('execution-steps').children,readyRows);
+  assert.equal(get('execution-progress-label').textContent,'準備就緒');
+});
 test('automatic switching shows pending feedback and supports cancelling instead of asking for manual focus', () => {
   const {get,state,push,sent}=desktop();
   push(state({workspace:'execution',pendingRun:true,switchingWindow:true,flow:{autoSwitch:true,returnToApp:true,targetTitle:'目標',targetId:'123'}}));

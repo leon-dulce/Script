@@ -61,7 +61,7 @@ try {
 }
 finally { [void][PublishedManifest]::FreeLibrary($module) }
 $versionInfo = [Diagnostics.FileVersionInfo]::GetVersionInfo((Resolve-Path -LiteralPath $Executable).Path)
-if ($versionInfo.FileVersion -ne '1.0.1.0' -or $versionInfo.ProductVersion -ne '1.0.1 Stable' -or $versionInfo.ProductName -ne 'FlowKey') {
+if ($versionInfo.FileVersion -ne '1.0.2.0' -or $versionInfo.ProductVersion -ne '1.0.2 Stable' -or $versionInfo.ProductName -ne 'FlowKey') {
     throw "Published executable has unexpected version metadata: file=$($versionInfo.FileVersion), product=$($versionInfo.ProductVersion), name=$($versionInfo.ProductName)."
 }
-Write-Output 'PASS published executable identifies FlowKey 1.0.1 Stable'
+Write-Output 'PASS published executable identifies FlowKey 1.0.2 Stable'

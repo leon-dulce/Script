@@ -384,6 +384,9 @@ internal static class DesktopE2E
             Until(() => EvalBool(app, "!document.getElementById('execution-view').hidden"), "close-test execution workspace did not open");
             OpenLibraryScript(app, catalog, secondId);
             hotkey = catalog.Load(secondId)!.Hotkey;
+            VerifyLongAltPlaybackAndStop(app, target, editor, hotkey);
+            OpenLibraryScript(app, catalog, firstId);
+            OpenLibraryScript(app, catalog, secondId);
             SetPlan(app, "Once", 2, 250);
             CurrentScript(app).Steps[2].DelayMs = 3000;
             keyEvents.Clear();
@@ -900,6 +903,65 @@ internal static class DesktopE2E
         finally { keyboard.ReleaseAll(); Native.UnhookWindowsHookEx(hook); GC.KeepAlive(hookCallback); }
     }
 
+    private static void VerifyLongAltPlaybackAndStop(MainWindow app, Window target, TextBox editor, string hotkey)
+    {
+        SetPlan(app, "Once", 2, 250);
+        var script = CurrentScript(app);
+        script.Steps = Enumerable.Range(0, 600)
+            .Select(index => new ScriptStep { Type = StepType.Key, Keys = [0xA4], KeyAction = KeyAction.Down,
+                DelayMs = index == 0 ? 0 : 50 }).ToList();
+        script.Steps.Add(new ScriptStep { Type = StepType.Key, Keys = [0xA4], KeyAction = KeyAction.Up, DelayMs = 50 });
+        Post(app, "{action:'refresh'}");
+        Until(() => EvalBool(app, "document.querySelectorAll('#execution-steps .step').length===601"),
+            "long Alt fixture was not visible");
+        var transitions = new List<(bool Up, long Tick)>();
+        Native.HookCallback callback = (code, message, pointer) =>
+        {
+            if (code >= 0)
+            {
+                var data = Marshal.PtrToStructure<Native.KeyboardData>(pointer);
+                if (data.ExtraInfo == Native.ReplayInputTag && data.VkCode == 0xA4)
+                    transitions.Add((message is Native.KeyUp or Native.SysKeyUp, Stopwatch.GetTimestamp()));
+            }
+            return Native.CallNextHookEx(0, code, message, pointer);
+        };
+        var hook = Native.SetWindowsHookEx(Native.KeyboardHook, callback, Native.GetModuleHandle(null), 0);
+        if (hook == 0) throw new Exception("Long Alt observation hook unavailable.");
+        try
+        {
+            ActivateTarget(target, editor);
+            PressHotkey(hotkey);
+            Until(() => transitions.Count(e => e.Up) == 1 && Text(app, "status-text") == "準備好了",
+                "30-second Alt replay did not release and complete", 38000);
+            var first = transitions.First().Tick;
+            var release = transitions.Last().Tick;
+            var heldMs = Stopwatch.GetElapsedTime(first, release).TotalMilliseconds;
+            if (transitions.Count(e => !e.Up) != 600 || heldMs is < 28500 or > 33500 ||
+                (Native.GetAsyncKeyState(0xA4) & 0x8000) != 0)
+                throw new Exception($"Long Alt timing/release wrong: downs={transitions.Count(e => !e.Up)}, held={heldMs:F0} ms.");
+            Until(() => typeof(MainWindow).GetField("_playback", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(app) is null,
+                "completed long Alt run did not finish cleanup");
+            transitions.Clear();
+            ActivateTarget(target, editor);
+            PressHotkey(hotkey);
+            Until(() => transitions.Any(e => !e.Up) && (Native.GetAsyncKeyState(0xA4) & 0x8000) != 0,
+                "second long Alt replay never held Alt");
+            var stopAt = Stopwatch.GetTimestamp();
+            var code = (uint)(0x70 + int.Parse(hotkey[1..]) - 1);
+            SendTestKey(app, code);
+            SendTestKey(app, code, keyUp: true);
+            Until(() => Text(app, "status-text") == "準備好了" && transitions.Any(e => e.Up) &&
+                (Native.GetAsyncKeyState(0xA4) & 0x8000) == 0,
+                "physical stop shortcut did not release held Alt", 3000);
+            if (Stopwatch.GetElapsedTime(stopAt).TotalMilliseconds > 1000 || transitions.Count(e => !e.Up) >= 600)
+                throw new Exception("Stopping Alt replay took too long or ran to the end.");
+            Until(() => typeof(MainWindow).GetField("_playback", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(app) is null,
+                "stopped long Alt run did not finish cleanup");
+            Console.WriteLine($"PASS Windows UI: 600 repeated Alt downs replayed for {heldMs:F0} ms, released at 30 seconds, and physical {hotkey} stopped held Alt within one second");
+        }
+        finally { Native.UnhookWindowsHookEx(hook); GC.KeepAlive(callback); }
+    }
+
     private static void SendTestKey(MainWindow app, uint key, bool keyUp = false, uint flags = 0)
     {
         Native.GetWindowThreadProcessId(Native.GetForegroundWindow(), out var foregroundProcess);
@@ -1020,7 +1082,7 @@ internal static class DesktopE2E
         {
             target.Activate();
             Until(() => Native.GetForegroundWindow() == handle || watch.ElapsedMilliseconds >= 120000,
-                "initial manual-focus wait did not finish", 47000);
+                "initial manual-focus wait did not finish", 123000);
             if (Native.GetForegroundWindow() != handle)
                 throw new DesktopUnavailableException("initial manual focus timed out after 120 seconds; no test input was sent");
         }
@@ -1156,7 +1218,7 @@ internal static class DesktopE2E
 
     private static void VerifyAppearance(MainWindow app)
     {
-        if (app.Title != "FlowKey 1.0.1 Stable") throw new Exception("The release version is missing from the Windows title.");
+        if (app.Title != "FlowKey 1.0.2 Stable") throw new Exception("The release version is missing from the Windows title.");
         Until(() => EvalBool(app, "document.fonts.check('600 24px \"FlowKey Serif\"','錄製與編輯') && document.querySelector('.brand img').naturalWidth>0"), "offline font or logo failed to load", 30000);
         if (app.Icon is null || !EvalBool(app, "document.documentElement.lang==='zh-Hant' && getComputedStyle(document.querySelector('.sidebar')).backgroundColor==='rgb(34, 39, 48)' && getComputedStyle(document.querySelector('.topbar')).display==='none' && !document.querySelector('.demo-badge')"))
             throw new Exception("Traditional Chinese layout or window icon missing.");
