@@ -30,6 +30,13 @@ internal static class Native
     [DllImport("user32.dll")] internal static extern bool SetForegroundWindow(nint handle);
     [DllImport("user32.dll")] internal static extern bool IsIconic(nint handle);
     [DllImport("user32.dll")] internal static extern bool ShowWindow(nint handle, int command);
+    [DllImport("user32.dll")] internal static extern bool ShowWindowAsync(nint handle, int command);
+
+    internal static void RequestWindowActivation(nint handle)
+    {
+        if (IsIconic(handle)) ShowWindowAsync(handle, 9);
+        SetForegroundWindow(handle);
+    }
 
     internal static bool ActivateWindow(nint handle)
     {
@@ -73,7 +80,8 @@ internal static class Native
         {
             if (handle == ownHandle || !IsWindowVisible(handle)) return true;
             var length = GetWindowTextLength(handle);
-            if (length == 0 || length > 512 || !GetClientRect(handle, out var rect) || rect.Width <= 0 || rect.Height <= 0) return true;
+            if (length == 0 || length > 512 || !GetClientRect(handle, out var rect) ||
+                ((rect.Width <= 0 || rect.Height <= 0) && !IsIconic(handle))) return true;
             var title = new StringBuilder(length + 1);
             GetWindowText(handle, title, title.Capacity);
             GetWindowThreadProcessId(handle, out var processId);

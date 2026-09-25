@@ -27,6 +27,7 @@ public partial class MainWindow : Window
     private string _workspace = "editor";
     private FlowPreferences _flowPreferences = new();
     private WindowInfo? _flowTargetIdentity;
+    private WindowActivationWait? _activationWait;
     private string _flowMessage = "修改后自动保存，适用于所有脚本。";
     private string FlowSettingsPath => Path.Combine(_dataDirectory, "settings.json");
     private string _recordingHotkey = "F10";
@@ -230,6 +231,7 @@ public partial class MainWindow : Window
                 targetTitle = _flowPreferences.TargetTitle, targetId = _flowPreferences.Resolve(_windows, _flowTargetIdentity)?.Handle.ToString() ?? "", message = _flowMessage },
             currentIteration = _currentIteration, waitingForNextRun = _waitingForNextRun,
             pendingRecord = _pendingRecord, pendingRun = _pendingRun, dirty = _dirty,
+            switchingWindow = _pendingRun && _activationWait is not null,
             namingRequired = _namingRequired, namingError = _namingError,
             elevated = _elevated, recordingAccessWarning = _recordingAccessWarning,
             selectedId = _target?.Handle.ToString() ?? "",
@@ -616,6 +618,24 @@ public partial class MainWindow : Window
                 Publish();
             }
         }
+        if (_pendingRun && _activationWait is { } activation)
+        {
+            var exists = _target is { } candidate && Native.Matches(candidate);
+            var result = activation.Observe(Environment.TickCount64, exists,
+                exists && Native.GetForegroundWindow() == _target!.Value.Handle && !Native.IsIconic(_target.Value.Handle));
+            if (result == ActivationStatus.Waiting) return;
+            _activationWait = null;
+            _pendingRun = false;
+            if (result == ActivationStatus.Missing)
+            { _message = MissingFlowTargetMessage(); Publish(); return; }
+            if (result == ActivationStatus.TimedOut)
+            { _message = "窗口切换未完成，本次没有执行。请确认目标窗口可用后重试。"; Publish(); return; }
+            // Restore can change the client size; capture the settled dimensions before preflight.
+            var activated = _target!.Value;
+            if (Native.GetClientRect(activated.Handle, out var rect))
+                _target = activated with { Width = rect.Width, Height = rect.Height };
+            StartRun(); Publish(); return;
+        }
         if (_pendingRun && _target is null) ConfirmForegroundTarget();
         if (_target is not { } target) return;
         if (_pendingRun)
@@ -631,7 +651,8 @@ public partial class MainWindow : Window
     {
         if (_mode == "running") { StopRun("已停止执行。"); return; }
         if (_mode != "ready" || _workspace != "execution") return;
-        if (_pendingRun) { _pendingRun = false; _message = "已取消等待执行。"; Publish(); return; }
+        if (_pendingRun) { _pendingRun = false; _activationWait = null; _message = "已取消等待执行。"; Publish(); return; }
+        if (_playback is not null) { _message = "上一轮执行正在结束，请稍后再启动。"; Publish(); return; }
         if (_script.Steps.Count == 0 || !_savedScripts.Any(s => s.Id == _script.Id))
         { _message = "请先从左侧选择有操作步骤的已保存脚本。"; Publish(); return; }
         if (_flowPreferences.AutoSwitch)
@@ -639,12 +660,15 @@ public partial class MainWindow : Window
             RefreshWindows();
             _target = _flowPreferences.Resolve(_windows, _flowTargetIdentity);
             if (_target is not { } automaticTarget)
-            { _message = "设置中的目标窗口不可用或有多个同名窗口，请在设置页重新选择。"; Publish(); return; }
-            var automaticProblem = RunPreflight(automaticTarget);
+            { _message = MissingFlowTargetMessage(); Publish(); return; }
+            var automaticProblem = Native.IsIconic(automaticTarget.Handle) ? null : RunPreflight(automaticTarget);
             if (automaticProblem is not null) { _message = automaticProblem; Publish(); return; }
-            if (!Native.ActivateWindow(automaticTarget.Handle))
-            { _message = "Windows 未允许切换窗口，本次没有执行；请切到目标窗口后再次启动。"; Publish(); return; }
-            StartRun(); return;
+            _activationWait = new WindowActivationWait(Environment.TickCount64);
+            _pendingRun = true;
+            _message = $"正在切换到「{automaticTarget.Title}」，窗口就绪后自动开始。";
+            Publish();
+            Native.RequestWindowActivation(automaticTarget.Handle);
+            return;
         }
         if (_target is null) ConfirmForegroundTarget();
         if (_target is not { } target)
@@ -662,6 +686,10 @@ public partial class MainWindow : Window
         { _pendingRun = true; _message = "已准备执行，请切回目标窗口；再次点击可取消。"; Publish(); return; }
         StartRun();
     }
+
+    private string MissingFlowTargetMessage() => _flowPreferences.TargetTitle.Length == 0
+        ? "尚未设置指定窗口，请到设置页选择执行窗口。"
+        : $"未找到指定窗口「{_flowPreferences.TargetTitle}」。请先开启该程序；若已开启，请刷新设置中的窗口列表并重新选择（同名窗口也需重选）。";
 
     private string? RunPreflight(WindowInfo target)
     {

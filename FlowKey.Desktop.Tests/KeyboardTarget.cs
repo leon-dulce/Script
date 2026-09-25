@@ -21,6 +21,7 @@ internal static class KeyboardTarget
                 Console.WriteLine(new WindowInteropHelper(window).Handle);
                 Console.Out.Flush();
             };
+            input.TextChanged += (_, _) => { Console.WriteLine("TEXT:" + input.Text); Console.Out.Flush(); };
             application.Run(window);
         });
         thread.SetApartmentState(ApartmentState.STA);

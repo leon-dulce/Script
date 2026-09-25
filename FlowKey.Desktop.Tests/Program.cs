@@ -149,6 +149,17 @@ if (!new KeyTransitionFilter().Accept(KeyboardStepFactory.Create(0x41, 0, false,
 Console.WriteLine("PASS held-key repeat suppression, overlapping keys, release/repress, modifier sides and recording reset");
 
 FlowPreferencesTests.Run();
+var activation = new WindowActivationWait(0);
+if (activation.Observe(0, true, false) != ActivationStatus.Waiting ||
+    activation.Observe(100, true, true) != ActivationStatus.Waiting ||
+    activation.Observe(250, true, false) != ActivationStatus.Waiting ||
+    activation.Observe(400, true, true) != ActivationStatus.Waiting ||
+    activation.Observe(599, true, true) != ActivationStatus.Waiting ||
+    activation.Observe(600, true, true) != ActivationStatus.Ready ||
+    new WindowActivationWait(0).Observe(5000, true, false) != ActivationStatus.TimedOut ||
+    new WindowActivationWait(0).Observe(50, false, false) != ActivationStatus.Missing)
+    throw new Exception("Delayed/transient/denied/closed window activation was handled incorrectly.");
+Console.WriteLine("PASS delayed foreground activation, stable focus, timeout and closed-window rejection");
 DesktopE2E.Run();
 
 var assetsRoot = Path.Combine(Path.GetTempPath(), "FlowKey-assets-test-" + Guid.NewGuid().ToString("N"));

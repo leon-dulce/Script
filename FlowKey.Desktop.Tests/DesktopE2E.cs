@@ -109,6 +109,7 @@ internal static class DesktopE2E
             ConfirmRecordingName(app, "E2E XY");
             WaitForNamedSave(app, catalog, firstId, "E2E XY", 1);
             VerifyWindowFlowSettings(app, target, editor);
+            VerifyAutomaticCrossProcessPlayback(app);
             Eval(app, "document.getElementById('nav-editor').click()");
             Until(() => EvalBool(app, "!document.getElementById('workspace-view').hidden"), "saved recording did not reopen for editing");
             SetRecordedDelay(app, 0, 400);
@@ -609,12 +610,61 @@ internal static class DesktopE2E
         ActivateWindow(app);
         editor.Clear();
         Eval(app, "document.getElementById('execution-start').click()");
-        Until(() => Text(app, "execution-message").Contains("目标窗口不可用"), "closed automatic target did not report failure");
+        Until(() => Text(app, "execution-message").Contains("未找到指定窗口") && Text(app, "execution-message").Contains("FlowKey closed flow target"), "closed automatic target did not identify the missing window");
         if (editor.Text.Length != 0 || Text(app, "status-text") != "就绪，等待操作") throw new Exception("Closed target started execution.");
         Eval(app, "document.getElementById('nav-settings').click()");
         Post(app, "{action:'flowSettings',autoSwitch:false,returnToApp:false,targetId:''}");
         Eval(app, "document.getElementById('nav-execution').click()");
         Console.WriteLine("PASS Windows settings page and four start/end flows; closed automatic target never sends keys");
+    }
+
+    private static void VerifyAutomaticCrossProcessPlayback(MainWindow app)
+    {
+        var start = new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false, RedirectStandardOutput = true, CreateNoWindow = true };
+        if (Path.GetFileNameWithoutExtension(start.FileName).Equals("dotnet", StringComparison.OrdinalIgnoreCase))
+            start.ArgumentList.Add(typeof(DesktopE2E).Assembly.Location);
+        start.ArgumentList.Add("--keyboard-target");
+        using var child = Process.Start(start) ?? throw new Exception("Cannot launch separate playback target.");
+        try
+        {
+            var opened = child.StandardOutput.ReadLineAsync();
+            Until(() => opened.IsCompleted, "separate playback target did not open");
+            var handle = nint.Parse(opened.GetAwaiter().GetResult()!);
+            Native.GetWindowThreadProcessId(handle, out var owner);
+            if (owner != child.Id) throw new Exception("Playback target identity mismatch.");
+            ActivateWindow(app);
+            Eval(app, "document.getElementById('nav-settings').click()");
+            Post(app, "{action:'flowSettings',autoSwitch:true,returnToApp:true,targetId:'" + handle + "'}");
+            Eval(app, "document.getElementById('nav-execution').click()");
+            var received = Task.Run(async () =>
+            {
+                while (await child.StandardOutput.ReadLineAsync() is { } line)
+                    if (line == "TEXT:XY") return true;
+                return false;
+            });
+            Native.ShowWindow(handle, 6); // The configured target can be minimized when Start is clicked.
+            ActivateWindow(app);
+            Eval(app, "document.getElementById('execution-start').click()");
+            Until(() => EvalBool(app, "document.getElementById('execution-help').textContent.includes('正在自动切换')"),
+                "automatic start did not expose cancellable activation wait");
+            Eval(app, "document.getElementById('execution-start').click()");
+            PumpFor(350);
+            if (received.IsCompleted || Text(app, "status-text") != "就绪，等待操作")
+                throw new Exception("Cancelled automatic activation still executed the script.");
+            ActivateWindow(app);
+            Eval(app, "document.getElementById('execution-start').click()");
+            Until(() => received.IsCompleted && received.GetAwaiter().GetResult() &&
+                Text(app, "status-text") == "就绪，等待操作" && Native.GetForegroundWindow() == new WindowInteropHelper(app).Handle,
+                "automatic switch did not deliver script to the separate process and return", 15000);
+            Eval(app, "document.getElementById('nav-settings').click()");
+            Post(app, "{action:'flowSettings',autoSwitch:false,returnToApp:false,targetId:''}");
+            Eval(app, "document.getElementById('nav-execution').click()");
+            Console.WriteLine("PASS automatic cross-process window activation, actual script delivery and return to FlowKey");
+        }
+        finally
+        {
+            if (!child.HasExited) { child.CloseMainWindow(); if (!child.WaitForExit(2000)) child.Kill(); }
+        }
     }
 
     private static void VerifyQAndAltReplay(Window target, TextBox editor)
