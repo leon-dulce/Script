@@ -641,7 +641,9 @@ public partial class MainWindow : Window
 
     private async Task RunStepsAsync(WindowInfo target, CancellationTokenSource run)
     {
-        var keyboard = new KeyboardPlayback((key, release) => Native.SendKey(key, release));
+        // Use one target layout for both down and up, including cleanup after focus changes.
+        var keyboardLayout = Native.GetKeyboardLayout(Native.GetWindowThreadProcessId(target.Handle, out _));
+        var keyboard = new KeyboardPlayback((key, release) => Native.SendKey(key, release, layout: keyboardLayout));
         _playbackKeyboard = keyboard;
         try
         {

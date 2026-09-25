@@ -40,6 +40,8 @@ internal static class Native
     [DllImport("user32.dll")] internal static extern nint CallNextHookEx(nint hook, int code, nint wParam, nint lParam);
     [DllImport("user32.dll")] internal static extern bool SetCursorPos(int x, int y);
     [DllImport("user32.dll")] internal static extern short GetAsyncKeyState(int key);
+    [DllImport("user32.dll")] internal static extern nint GetKeyboardLayout(uint threadId);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] internal static extern uint MapVirtualKeyEx(uint code, uint mapType, nint layout);
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] internal static extern nint GetModuleHandle(string? moduleName);
     [DllImport("user32.dll", SetLastError = true)] internal static extern uint SendInput(uint count, [In] Input[] input, int size);
 
@@ -87,26 +89,30 @@ internal static class Native
     internal static bool SameSize(WindowInfo target) =>
         GetClientRect(target.Handle, out var rect) && rect.Width == target.Width && rect.Height == target.Height;
 
-    internal static void SendKey(ushort key, bool release = false, bool unicode = false)
+    internal static void SendKey(ushort key, bool release = false, bool unicode = false, nint layout = 0)
     {
-        var input = CreateKeyInput(key, release, unicode);
+        var input = CreateKeyInput(key, release, unicode, layout);
         if (SendInput(1, [input], Marshal.SizeOf<Input>()) != 1) throw new Win32Exception("无法向目标窗口发送按键。请确认窗口没有更高权限。");
     }
 
-    internal static Input CreateKeyInput(ushort key, bool release = false, bool unicode = false)
+    internal static Input CreateKeyInput(ushort key, bool release = false, bool unicode = false, nint layout = 0)
     {
-        // These virtual keys use an E0 prefix, including right Ctrl/Alt and navigation keys.
-        var extended = !unicode && (key is 0x03 or >= 0x21 and <= 0x28 or 0x2C or 0x2D or 0x2E or
-            0x5B or 0x5C or 0x5D or 0x6F or 0x90 or 0xA3 or 0xA5);
+        var mapped = unicode ? 0 : MapVirtualKeyEx(key, 4, layout == 0 ? GetKeyboardLayout(0) : layout);
+        // E1 keys (Pause) and keys without a physical mapping retain virtual-key delivery.
+        var scanCode = mapped != 0 && (mapped & 0xFF00) != 0xE100;
+        // Some IME layouts omit the E0 prefix for navigation keys in their mapping.
+        var extended = scanCode && ((mapped & 0xFF00) == 0xE000 ||
+            key is 0x03 or >= 0x21 and <= 0x28 or 0x2C or 0x2D or 0x2E or
+                0x5B or 0x5C or 0x5D or 0x6F or 0x90 or 0xA3 or 0xA5);
         return new Input
         {
             Type = 1,
             Key = new KeyInput
             {
                 ExtraInfo = ReplayInputTag,
-                VirtualKey = unicode ? (ushort)0 : key,
-                Scan = unicode ? key : (ushort)0,
-                Flags = (ushort)((extended ? 1 : 0) | (release ? 2 : 0) | (unicode ? 4 : 0))
+                VirtualKey = unicode || scanCode ? (ushort)0 : key,
+                Scan = unicode ? key : scanCode ? (ushort)(mapped & 0xFF) : (ushort)0,
+                Flags = (ushort)((extended ? 1 : 0) | (release ? 2 : 0) | (unicode ? 4 : scanCode ? 8 : 0))
             }
         };
     }

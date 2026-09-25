@@ -68,15 +68,15 @@ foreach (var keyUp in new[] { false, true })
 Console.WriteLine("PASS stateless key decoder preserves down/up events, modifiers and function keys");
 Console.WriteLine("PASS only the configured recording hotkey and own playback/invalid input are excluded");
 
-foreach (var key in new ushort[] { 0x03, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x2C, 0x2D, 0x2E, 0x5B, 0x5C, 0x5D, 0x6F, 0x90, 0xA3, 0xA5 })
+foreach (var key in new ushort[] { 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x2C, 0x2D, 0x2E, 0x5B, 0x5C, 0x5D, 0x6F, 0x90, 0xA3, 0xA5 })
 {
     var down = Native.CreateKeyInput(key);
     var up = Native.CreateKeyInput(key, release: true);
-    if (down.Key.ExtraInfo != Native.ReplayInputTag || down.Type != 1 || down.Key.VirtualKey != key || down.Key.Scan != 0 || down.Key.Flags != 1 || up.Key.Flags != 3)
-        throw new Exception($"Extended key {key:X2} lost its down/up flags.");
+    if (down.Key.ExtraInfo != Native.ReplayInputTag || down.Type != 1 || down.Key.VirtualKey != 0 || down.Key.Scan == 0 || down.Key.Flags != 9 || up.Key.Flags != 11)
+        throw new Exception($"Extended key {key:X2} lost its down/up flags: vk={down.Key.VirtualKey:X}, scan={down.Key.Scan:X}, down={down.Key.Flags:X}, up={up.Key.Flags:X}.");
 }
 foreach (var key in new ushort[] { 0x41, 0x10, 0x11, 0x12, 0xA0, 0xA1, 0xA2, 0xA4, 0x0D, 0x61 })
-    if (Native.CreateKeyInput(key).Key.Flags != 0 || Native.CreateKeyInput(key, release: true).Key.Flags != 2)
+    if (Native.CreateKeyInput(key).Key.Flags != 8 || Native.CreateKeyInput(key, release: true).Key.Flags != 10)
         throw new Exception($"Normal key {key:X2} was incorrectly marked extended.");
 foreach (var character in new ushort[] { 0xA3, 0x4E2D })
 {
@@ -86,6 +86,22 @@ foreach (var character in new ushort[] { 0xA3, 0x4E2D })
         throw new Exception("Unicode input was incorrectly treated as an extended virtual key.");
 }
 Console.WriteLine("PASS replay input preserves extended right-modifier/navigation keys and Unicode flags");
+foreach (var sample in new (ushort Key, ushort Scan, ushort Flags)[] { (0x51, 0x10, 8), (0xA4, 0x38, 8), (0xA5, 0x38, 9), (0x25, 0x4B, 9), (0x27, 0x4D, 9) })
+{
+    var down = Native.CreateKeyInput(sample.Key);
+    var up = Native.CreateKeyInput(sample.Key, release: true);
+    if (down.Key.VirtualKey != 0 || down.Key.Scan != sample.Scan || down.Key.Flags != sample.Flags ||
+        up.Key.Scan != sample.Scan || up.Key.Flags != (sample.Flags | 2))
+        throw new Exception("Q/Alt/arrows did not use physical scan codes for both transitions.");
+}
+foreach (var key in new ushort[] { 0x13, 0xE7 })
+{
+    var input = Native.CreateKeyInput(key);
+    if (input.Key.VirtualKey != key || input.Key.Scan != 0 || input.Key.Flags != 0)
+        throw new Exception("E1/unmapped key did not preserve virtual-key fallback.");
+}
+Console.WriteLine("PASS Q, left/right Alt and arrows use scan codes; Pause/unmapped fallback and Unicode remain supported");
+
 
 for (var attempt = 0; attempt < 3; attempt++)
 {

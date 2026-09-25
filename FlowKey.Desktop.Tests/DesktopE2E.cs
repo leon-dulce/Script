@@ -67,6 +67,7 @@ internal static class DesktopE2E
             var hotkey = ChooseHotkey(app);
             VerifyShortcutConflictRecovery(app, hotkey);
             VerifyCrossProcessRecording(app);
+            VerifyQAndAltReplay(target, editor);
             var catalog = new ScriptCatalog(Path.Combine(root, "scripts"));
             if (EvalBool(app, "!document.getElementById('sidebar-library').hidden"))
                 throw new Exception("Saved scripts must be hidden in the recording workspace.");
@@ -556,6 +557,47 @@ internal static class DesktopE2E
         catalog.List().Scripts.Count == scriptCount && catalog.Load(id)?.Name == name && CurrentScript(app).Id == id &&
         EvalBool(app, "!document.getElementById('recording-name-dialog').open && !document.getElementById('execution-view').hidden"),
         "confirming a recording name did not save that draft and show it in execution");
+
+    private static void VerifyQAndAltReplay(Window target, TextBox editor)
+    {
+        ActivateTarget(target, editor);
+        var observed = new List<(uint Key, uint Scan, bool Up)>();
+        Native.HookCallback hookCallback = (code, message, pointer) =>
+        {
+            if (code >= 0)
+            {
+                var data = Marshal.PtrToStructure<Native.KeyboardData>(pointer);
+                if (data.ExtraInfo == Native.ReplayInputTag)
+                    observed.Add((data.VkCode, data.ScanCode, message is Native.KeyUp or Native.SysKeyUp));
+            }
+            return Native.CallNextHookEx(0, code, message, pointer);
+        };
+        var hook = Native.SetWindowsHookEx(Native.KeyboardHook, hookCallback, Native.GetModuleHandle(null), 0);
+        if (hook == 0) throw new Exception("Scan-code observation hook unavailable.");
+        var layout = Native.GetKeyboardLayout(Native.GetWindowThreadProcessId(_keyboardTarget, out _));
+        var keyboard = new KeyboardPlayback((key, up) => Native.SendKey(key, up, layout: layout));
+        try
+        {
+            foreach (var key in new ushort[] { 0x51, 0xA4, 0xA5 })
+            {
+                if (Native.GetForegroundWindow() != _keyboardTarget) throw new DesktopUnavailableException("Scan-code test target lost focus.");
+                keyboard.Execute(new ScriptStep { Type = StepType.Key, Keys = [key], KeyAction = KeyAction.Down });
+                PumpFor(130);
+                if ((Native.GetAsyncKeyState(key) & 0x8000) == 0) throw new Exception($"Windows did not hold key {key:X2}.");
+                keyboard.Execute(new ScriptStep { Type = StepType.Key, Keys = [key], KeyAction = KeyAction.Up });
+                PumpFor(80);
+                if ((Native.GetAsyncKeyState(key) & 0x8000) != 0) throw new Exception($"Windows did not release key {key:X2}.");
+            }
+            foreach (var pair in new (uint Key, uint Scan)[] { (0x51, 0x10), (0xA4, 0x38), (0xA5, 0x38) })
+            {
+                var events = observed.Where(e => e.Key == pair.Key).ToArray();
+                if (events.Length != 2 || events[0] != (pair.Key, pair.Scan, false) || events[1] != (pair.Key, pair.Scan, true))
+                    throw new Exception("Windows did not receive the expected Q/Alt scan-code transitions.");
+            }
+            Console.WriteLine("PASS Windows Q and left/right Alt scan-code delivery, held state and release");
+        }
+        finally { keyboard.ReleaseAll(); Native.UnhookWindowsHookEx(hook); GC.KeepAlive(hookCallback); }
+    }
 
     private static void SendTestKey(MainWindow app, uint key, bool keyUp = false, uint flags = 0)
     {
