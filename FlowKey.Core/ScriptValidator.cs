@@ -10,7 +10,8 @@ public static class ScriptValidator
         if (script.Version != 1) throw new InvalidDataException("不支持此脚本版本。");
         if (string.IsNullOrWhiteSpace(script.Name) || script.Name.Length > 100)
             throw new InvalidDataException("脚本名称无效。");
-        if (script.TargetProcessPath.Length > 1024 || script.TargetTitle.Length > 512)
+        if (script.TargetProcessPath is null || script.TargetTitle is null ||
+            script.TargetProcessPath.Length > 1024 || script.TargetTitle.Length > 512)
             throw new InvalidDataException("目标窗口信息过长。");
         if (!Hotkeys.Contains(script.Hotkey)) throw new InvalidDataException("快捷键无效。");
         if (script.ClientWidth is < 0 or > 16384 || script.ClientHeight is < 0 or > 16384)
@@ -30,7 +31,9 @@ public static class ScriptValidator
                         throw new InvalidDataException("点击位置或按钮无效。");
                     break;
                 case StepType.Scroll:
-                    if (step.WheelDelta is < -12000 or > 12000 || step.WheelDelta == 0)
+                    if (step.WheelDelta is < -12000 or > 12000 || step.WheelDelta == 0 ||
+                        script.ClientWidth == 0 || script.ClientHeight == 0 ||
+                        step.X < 0 || step.X >= script.ClientWidth || step.Y < 0 || step.Y >= script.ClientHeight)
                         throw new InvalidDataException("滚动量无效。");
                     break;
                 case StepType.Key:

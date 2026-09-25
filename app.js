@@ -261,7 +261,7 @@
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = { createInitialState, isValidStep, addDemoStep, removeStep, updateStepDelay, canRun };
   }
-  if (typeof document !== 'undefined') {
+  if (typeof document !== 'undefined' && !(window.chrome && window.chrome.webview)) {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
     else init();
   }

@@ -5,7 +5,9 @@ var checks = new (string Name, Action Run)[]
     ("round trip saves all step types", RoundTrip),
     ("rejects unsafe script values", RejectsInvalid),
     ("corrupt file reports an error", CorruptFile),
-    ("invalid save preserves old file", InvalidSavePreservesFile)
+    ("invalid save preserves old file", InvalidSavePreservesFile),
+    ("recording coalesces double click and keeps delays", RecordingSteps),
+    ("session rejects overlapping runs and invalid transitions", SessionTransitions)
 };
 foreach (var check in checks)
 {
@@ -49,10 +51,16 @@ static void RejectsInvalid()
     script.Steps[0].X = 800;
     Throws(() => ScriptValidator.Validate(script));
     script.Steps[0].X = 4;
+    script.Steps[1].Y = 600;
+    Throws(() => ScriptValidator.Validate(script));
+    script.Steps[1].Y = 0;
     script.Steps[2].Keys = [121];
     Throws(() => ScriptValidator.Validate(script));
     script.Steps[2].Keys = [17, 83];
     script.Steps[3].Text = "";
+    Throws(() => ScriptValidator.Validate(script));
+    script.Steps[3].Text = "ok";
+    script.TargetTitle = null!;
     Throws(() => ScriptValidator.Validate(script));
 }
 
@@ -62,6 +70,8 @@ static void CorruptFile()
     try
     {
         File.WriteAllText(path, "{oops");
+        Throws(() => new ScriptStore(path).Load());
+        File.WriteAllText(path, "{}");
         Throws(() => new ScriptStore(path).Load());
     }
     finally { File.Delete(path); }
@@ -81,6 +91,32 @@ static void InvalidSavePreservesFile()
         Check(File.ReadAllText(path) == original);
     }
     finally { File.Delete(path); }
+}
+
+static void RecordingSteps()
+{
+    var recorder = new StepRecorder();
+    var steps = new List<ScriptStep>();
+    var start = System.Diagnostics.Stopwatch.GetTimestamp();
+    recorder.Add(steps, new ScriptStep { Type = StepType.Click, X = 2, Y = 3 }, start);
+    recorder.Add(steps, new ScriptStep { Type = StepType.Click, X = 2, Y = 3 }, start + System.Diagnostics.Stopwatch.Frequency / 4);
+    Check(steps.Count == 1 && steps[0].Type == StepType.DoubleClick && steps[0].DelayMs == 0);
+    recorder.Add(steps, new ScriptStep { Type = StepType.Key, Keys = [65] }, start + System.Diagnostics.Stopwatch.Frequency / 2);
+    Check(steps.Count == 2 && steps[1].DelayMs >= 240 && steps[1].DelayMs <= 260);
+    recorder.Reset();
+    recorder.Add(steps, new ScriptStep { Type = StepType.Scroll, WheelDelta = 120 }, start + System.Diagnostics.Stopwatch.Frequency);
+    Check(steps[2].DelayMs == 0);
+}
+
+static void SessionTransitions()
+{
+    var session = new SessionState();
+    Check(session.Mode == "ready" && session.BeginRun());
+    Check(!session.BeginRun() && !session.BeginRecording());
+    Check(session.StopRun() && !session.StopRun());
+    Check(session.BeginRecording() && session.PauseRecording());
+    Check(!session.BeginRun() && session.BeginRecording());
+    Check(session.FinishRecording() && session.Mode == "ready");
 }
 
 static void Check(bool condition)
