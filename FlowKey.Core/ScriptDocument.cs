@@ -37,6 +37,9 @@ public sealed class ExecutionPlan
 [JsonConverter(typeof(JsonStringEnumConverter<StepType>))]
 public enum StepType { Click, DoubleClick, Scroll, Key, Text }
 
+[JsonConverter(typeof(JsonStringEnumConverter<KeyAction>))]
+public enum KeyAction { Press, Down, Up }
+
 public sealed class ScriptStep
 {
     [JsonRequired] public StepType Type { get; set; }
@@ -46,5 +49,6 @@ public sealed class ScriptStep
     [JsonRequired] public string Button { get; set; } = "Left";
     [JsonRequired] public int WheelDelta { get; set; }
     [JsonRequired] public List<int> Keys { get; set; } = [];
+    public KeyAction KeyAction { get; set; } = KeyAction.Press;
     [JsonRequired] public string Text { get; set; } = "";
 }

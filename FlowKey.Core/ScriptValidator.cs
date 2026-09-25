@@ -24,7 +24,7 @@ public static class ScriptValidator
             throw new InvalidDataException("步骤数量无效。");
         foreach (var step in script.Steps)
         {
-            if (step is null || !Enum.IsDefined(step.Type) || step.DelayMs is < 0 or > 60000)
+            if (step is null || !Enum.IsDefined(step.Type) || !Enum.IsDefined(step.KeyAction) || step.DelayMs < 0)
                 throw new InvalidDataException("步骤类型或等待时间无效。");
             switch (step.Type)
             {
@@ -41,9 +41,10 @@ public static class ScriptValidator
                         throw new InvalidDataException("滚动量无效。");
                     break;
                 case StepType.Key:
-                    if (step.Keys is null || step.Keys.Count is < 1 or > 4 ||
+                    if (step.Keys is null || step.Keys.Count is < 1 or > 5 ||
+                        (step.KeyAction != KeyAction.Press && step.Keys.Count != 1) ||
                         step.Keys.Any(key => key is < 1 or > 254) ||
-                        step.Keys.Any(key => key is >= 119 and <= 122))
+                        step.Keys.Contains(119 + Array.IndexOf(Hotkeys, script.Hotkey)))
                         throw new InvalidDataException("按键组合无效。");
                     break;
                 case StepType.Text:

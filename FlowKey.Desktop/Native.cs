@@ -10,7 +10,7 @@ internal readonly record struct WindowInfo(nint Handle, int ProcessId, string Ti
 internal static class Native
 {
     internal const int KeyboardHook = 13, MouseHook = 14, HotkeyMessage = 0x0312;
-    internal const int KeyDown = 0x0100, SysKeyDown = 0x0104;
+    internal const int KeyDown = 0x0100, KeyUp = 0x0101, SysKeyDown = 0x0104, SysKeyUp = 0x0105;
     internal const int LeftDown = 0x0201, RightDown = 0x0204, MiddleDown = 0x0207, Wheel = 0x020A;
     internal const uint InjectedKeyboard = 0x10, InjectedMouse = 0x01;
 
@@ -87,8 +87,25 @@ internal static class Native
 
     internal static void SendKey(ushort key, bool release = false, bool unicode = false)
     {
-        var input = new Input { Type = 1, Key = new KeyInput { VirtualKey = unicode ? (ushort)0 : key, Scan = unicode ? key : (ushort)0, Flags = (ushort)((release ? 2 : 0) | (unicode ? 4 : 0)) } };
+        var input = CreateKeyInput(key, release, unicode);
         if (SendInput(1, [input], Marshal.SizeOf<Input>()) != 1) throw new Win32Exception("无法向目标窗口发送按键。请确认窗口没有更高权限。");
+    }
+
+    internal static Input CreateKeyInput(ushort key, bool release = false, bool unicode = false)
+    {
+        // These virtual keys use an E0 prefix, including right Ctrl/Alt and navigation keys.
+        var extended = !unicode && (key is 0x03 or >= 0x21 and <= 0x28 or 0x2C or 0x2D or 0x2E or
+            0x5B or 0x5C or 0x5D or 0x6F or 0x90 or 0xA3 or 0xA5);
+        return new Input
+        {
+            Type = 1,
+            Key = new KeyInput
+            {
+                VirtualKey = unicode ? (ushort)0 : key,
+                Scan = unicode ? key : (ushort)0,
+                Flags = (ushort)((extended ? 1 : 0) | (release ? 2 : 0) | (unicode ? 4 : 0))
+            }
+        };
     }
 
     internal static void SendMouse(uint flags, uint data = 0)

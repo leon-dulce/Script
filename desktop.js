@@ -9,8 +9,9 @@
   let lastMessage = '';
   let view = 'editor';
   let lastHighlightedStep = '';
+  let lastRecordedStep = '';
 
-  const isBusy = () => !state || state.mode !== 'ready' || state.pendingRecord || state.pendingRun;
+  const isBusy = () => !state || state.mode !== 'ready' || state.pendingRecord || state.pendingRun || state.namingRequired;
   const hasSavedScript = () => state.savedScripts.some(script => script.id === state.script.id);
 
   function executionLabel(plan) {
@@ -45,7 +46,7 @@
     if (!state.savedScripts.length) {
       const empty = document.createElement('div');
       empty.className = 'library-empty';
-      empty.textContent = '尚无已保存脚本。结束录制后，脚本会自动出现在这里。';
+      empty.textContent = '尚无已保存脚本。结束录制后，为脚本命名并确认保存，就会出现在这里。';
       library.append(empty);
     }
     state.savedScripts.forEach(script => {
@@ -150,12 +151,41 @@
     send('execution', { mode, count, intervalMs });
   }
 
+  function keyName(key) {
+    const names = {
+      3: 'Cancel', 8: 'Backspace', 9: 'Tab', 12: 'Clear', 13: 'Enter',
+      16: 'Shift', 17: 'Ctrl', 18: 'Alt', 19: 'Pause', 20: 'Caps Lock',
+      21: 'Kana', 23: 'Junja', 24: 'Final', 25: 'Hanja', 27: 'Esc',
+      28: 'Convert', 29: 'NonConvert', 30: 'Accept', 31: 'Mode Change',
+      32: 'Space', 33: 'Page Up', 34: 'Page Down', 35: 'End', 36: 'Home',
+      37: '←', 38: '↑', 39: '→', 40: '↓', 41: 'Select', 42: 'Print',
+      43: 'Execute', 44: 'Print Screen', 45: 'Insert', 46: 'Delete', 47: 'Help',
+      91: '左 Win', 92: '右 Win', 93: 'Menu', 95: 'Sleep',
+      106: 'Numpad *', 107: 'Numpad +', 108: 'Numpad 分隔符', 109: 'Numpad -',
+      110: 'Numpad .', 111: 'Numpad /', 144: 'Num Lock', 145: 'Scroll Lock',
+      160: '左 Shift', 161: '右 Shift', 162: '左 Ctrl', 163: '右 Ctrl', 164: '左 Alt', 165: '右 Alt',
+      166: '浏览器后退', 167: '浏览器前进', 168: '浏览器刷新', 169: '浏览器停止',
+      170: '浏览器搜索', 171: '浏览器收藏', 172: '浏览器主页',
+      173: '静音', 174: '降低音量', 175: '提高音量', 176: '下一曲', 177: '上一曲',
+      178: '停止媒体', 179: '播放 / 暂停', 180: '邮件', 181: '媒体', 182: '应用 1', 183: '应用 2',
+      186: '; / :', 187: '= / +', 188: ', / <', 189: '- / _', 190: '. / >', 191: '/ / ?',
+      192: '` / ~', 219: '[ / {', 220: '\\ / |', 221: '] / }', 222: "' / \"", 226: 'OEM 102',
+      229: 'IME Process', 231: 'Unicode Packet', 246: 'Attn', 247: 'CrSel', 248: 'ExSel',
+      249: 'Erase EOF', 250: 'Play', 251: 'Zoom', 253: 'PA1', 254: 'OEM Clear'
+    };
+    if (names[key]) return names[key];
+    if ((key >= 48 && key <= 57) || (key >= 65 && key <= 90)) return String.fromCharCode(key);
+    if (key >= 96 && key <= 105) return `Numpad ${key - 96}`;
+    if (key >= 112 && key <= 135) return `F${key - 111}`;
+    return `按键 0x${key.toString(16).toUpperCase().padStart(2, '0')}`;
+  }
+
   function stepLabel(step) {
     switch (step.type) {
       case 'Click': return ['点击', `${step.button} · (${step.x}, ${step.y})`];
       case 'DoubleClick': return ['双击', `${step.button} · (${step.x}, ${step.y})`];
       case 'Scroll': return ['滚动', `${step.wheelDelta > 0 ? '向上' : '向下'} ${Math.abs(step.wheelDelta)} 格`];
-      case 'Key': return ['按键', step.keys.map(key => ({ 17: 'Ctrl', 18: 'Alt', 16: 'Shift', 91: 'Win', 13: 'Enter', 9: 'Tab', 27: 'Esc' })[key] || (key >= 65 && key <= 90 ? String.fromCharCode(key) : `VK ${key}`)).join(' + ')];
+      case 'Key': return [step.keyAction === 'Down' ? '按下按键' : step.keyAction === 'Up' ? '松开按键' : '按键', step.keys.map(keyName).join(' + ')];
       case 'Text': return ['输入文字', step.text];
       default: return ['未知步骤', ''];
     }
@@ -167,7 +197,7 @@
     if (!steps.length) {
       const empty = document.createElement('div');
       empty.className = 'empty';
-      empty.textContent = editable ? '在要录制的窗口按快捷键，开始记录键盘与鼠标操作。' : '从左侧选择一个已保存脚本，查看完整执行步骤。';
+      empty.textContent = editable ? '先设置窗口名称和快捷键，再到指定窗口按快捷键。每次按下、松开按键与间隔都会即时显示。' : '从左侧选择一个已保存脚本，查看完整执行步骤。';
       container.appendChild(empty);
     }
     steps.forEach((step, index) => {
@@ -191,7 +221,7 @@
       if (!editable) {
         const delay = document.createElement('span');
         delay.className = 'execution-delay';
-        delay.textContent = step.delayMs ? `等待 ${step.delayMs} 毫秒` : '立即执行';
+        delay.textContent = `间隔 ${step.delayMs} 毫秒`;
         row.append(delay);
         container.append(row);
         const highlightKey = `${state.script.id}:${state.currentIteration}:${index}`;
@@ -203,18 +233,31 @@
       }
       const controls = document.createElement('div');
       controls.className = 'step-tools';
+      const interval = document.createElement('span');
+      interval.className = 'step-interval';
+      interval.textContent = `间隔 ${step.delayMs} 毫秒`;
+      controls.append(interval);
       const delay = document.createElement('input');
       delay.type = 'number';
       delay.min = '0';
-      delay.max = '60000';
-      delay.step = '50';
+      delay.max = '2147483647';
+      delay.step = '1';
       delay.value = String(step.delayMs);
       delay.className = 'delay';
       delay.style.width = '74px';
       delay.title = '执行前等待毫秒数';
       delay.setAttribute('aria-label', `步骤 ${index + 1} 的等待毫秒数`);
       delay.disabled = isBusy();
-      delay.addEventListener('change', () => send('delay', { index, value: Number(delay.value) }));
+      delay.hidden = isBusy();
+      delay.addEventListener('change', () => {
+        const value = Number(delay.value);
+        if (!delay.value.trim() || !Number.isInteger(value) || value < 0 || value > 2147483647) {
+          window.alert('步骤间隔须为 0–2147483647 毫秒的整数。');
+          delay.value = String(step.delayMs);
+          return;
+        }
+        send('delay', { index, value });
+      });
       controls.append(delay);
       if (step.type === 'Text') {
         const edit = document.createElement('button');
@@ -222,6 +265,7 @@
         edit.textContent = '✎';
         edit.title = '编辑文字';
         edit.disabled = isBusy();
+        edit.hidden = isBusy();
         edit.addEventListener('click', () => {
           const value = window.prompt('编辑输入文字步骤', step.text);
           if (value) send('text', { index, value });
@@ -233,12 +277,45 @@
       remove.textContent = '×';
       remove.title = '删除步骤';
       remove.disabled = isBusy();
+      remove.hidden = isBusy();
       remove.addEventListener('click', () => send('delete', { index }));
       controls.append(remove);
       row.append(controls);
       container.append(row);
+      if (state.mode === 'recording' && view === 'editor' && index === steps.length - 1) {
+        const recordingKey = `${state.script.id}:${steps.length}`;
+        if (recordingKey !== lastRecordedStep) {
+          row.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+          lastRecordedStep = recordingKey;
+        }
+      }
     });
+    if (editable && !steps.length) lastRecordedStep = '';
     if (!editable && (state.mode !== 'running' || state.waitingForNextRun)) lastHighlightedStep = '';
+  }
+
+  function renderNaming() {
+    const dialog = $('recording-name-dialog');
+    if (!state.namingRequired) {
+      if (dialog.open) dialog.close();
+      return;
+    }
+    if (!dialog.open) {
+      $('recording-name-input').value = state.script.name || '';
+      dialog.showModal();
+    }
+    $('recording-name-error').textContent = state.namingError || '';
+  }
+
+  function saveRecording() {
+    if (!state?.namingRequired) return;
+    const name = $('recording-name-input').value.trim();
+    if (!name || name.length > 100) {
+      $('recording-name-error').textContent = !name ? '请输入脚本名称。' : '脚本名称不可超过 100 个字符。';
+      return;
+    }
+    $('recording-name-error').textContent = '';
+    send('saveRecording', { name });
   }
 
   function render() {
@@ -258,30 +335,38 @@
     });
     select.value = state.selectedId;
     select.disabled = state.mode !== 'ready';
-    $('window-name').textContent = selected ? selected.title : '等待快捷键确认目标窗口';
-    document.querySelector('.window-meta small').textContent = selected ? `${selected.process} · 已确认` : '切到要录制的窗口，按快捷键即可开始';
+    const recordingTitle = state.recordingTargetTitle || '';
+    if (document.activeElement !== $('recording-window-title')) $('recording-window-title').value = recordingTitle;
+    $('recording-window-title').disabled = isBusy();
+    const titleOptions = $('recording-window-options');
+    titleOptions.replaceChildren(...[...new Set(state.windows.map(item => item.title))].map(title => {
+      const option = document.createElement('option');
+      option.value = title;
+      return option;
+    }));
+    $('window-name').textContent = selected ? selected.title : recordingTitle || '请先设置窗口名称';
+    document.querySelector('.window-meta small').textContent = selected ? `${selected.process} · 已确认` : recordingTitle ? '已配置，切到同名窗口按快捷键开始' : '仅录制标题完全一致的窗口';
     $('hotkey-select').value = state.script.hotkey;
     if (document.activeElement !== $('script-name')) $('script-name').value = state.script.name;
     $('script-name').disabled = state.mode !== 'ready';
     $('hotkey-select').disabled = isBusy();
     $('nav-editor').disabled = isBusy();
     $('nav-execution').disabled = isBusy();
-    $('status-text').textContent = ({ ready: '就绪，等待操作', recording: '正在录制', paused: '录制已暂停', running: '正在执行脚本' })[state.mode] || '错误';
+    $('status-text').textContent = state.namingRequired ? '录制结束，等待命名保存' : ({ ready: '就绪，等待操作', recording: '正在录制', paused: '录制已暂停', running: '正在执行脚本' })[state.mode] || '错误';
     $('status-hint').textContent = state.message;
     $('status-dot').className = `pulse${state.mode === 'recording' ? ' recording' : state.mode === 'running' ? ' running' : ''}`;
-    $('record-button').querySelector('span').textContent = state.pendingRecord ? '取消等待录制' : state.mode === 'recording' ? '录制中' : state.mode === 'paused' ? '继续录制' : '开始录制';
-    $('record-button').disabled = state.mode === 'running' || state.mode === 'recording' || state.pendingRun;
-    $('finish-button').hidden = state.mode !== 'recording' && state.mode !== 'paused';
-    $('add-text').disabled = isBusy() || !(state.script.clientWidth > 0 && state.script.clientHeight > 0);
+    $('add-text').disabled = isBusy() || !hasSavedScript() || !(state.script.clientWidth > 0 && state.script.clientHeight > 0);
     document.querySelector('.help').textContent = state.mode === 'recording'
-      ? `按 ${state.script.hotkey} 或点击「结束并保存」即可结束录制并自动保存。`
-      : state.pendingRecord ? '切到要录制的窗口后会自动开始；再次点击可取消等待。'
-        : state.mode === 'paused' ? `切回录制窗口按 ${state.script.hotkey} 继续，或点击「结束并保存」。`
-          : `在要录制的窗口按 ${state.script.hotkey} 开始，录制完成后再按一次自动保存。每次开始都会录制一个新脚本。`;
+      ? `再次按 ${state.script.hotkey} 结束录制，然后为脚本命名并确认保存。`
+      : state.namingRequired ? '录制已结束，请在对话框输入脚本名称并确认保存。'
+        : state.mode === 'paused' ? `录制已暂停。按 ${state.script.hotkey} 结束，然后为脚本命名保存。`
+          : recordingTitle ? `切到「${recordingTitle}」按 ${state.script.hotkey} 开始，再按一次结束。命名并确认后，脚本才会加入脚本库。`
+            : '先设置完整窗口名称与快捷键，再切到指定窗口按快捷键开始录制。';
     $('step-count').textContent = `${state.script.steps.length} 个步骤`;
     renderSteps('steps', state.script.steps, true);
     renderLibrary();
     renderExecution(selected);
+    renderNaming();
     if (state.message !== lastMessage) {
       lastMessage = state.message;
       const toast = $('toast');
@@ -294,25 +379,28 @@
   document.addEventListener('DOMContentLoaded', () => {
     for (const id of ['load-button', 'save-button', 'new-editor-script', 'pause-button', 'refresh-windows',
       'window-select', 'script-name-row', 'plan-summary', 'open-execution', 'add-step',
-      'run-button', 'recording-progress']) $(id).hidden = true;
-    $('finish-button').hidden = true;
-    $('finish-button').textContent = '结束并保存';
+      'run-button', 'recording-progress', 'record-button', 'finish-button']) $(id).hidden = true;
+    $('recording-target-config').hidden = false;
     $('add-text').hidden = false;
-    $('recording-subtitle').textContent = '在目标窗口按快捷键开始录制，再按一次结束，脚本自动保存。';
-    $('recording-target-note').textContent = '在要录制的窗口按快捷键，即可自动确认目标';
+    $('recording-subtitle').textContent = '设置窗口名称与快捷键，在指定窗口开始及结束录制，命名后保存。';
+    $('recording-target-note').textContent = '仅在标题完全一致的窗口开始录制';
     $('run-title').textContent = '录制快捷键';
     $('hotkey-select').setAttribute('aria-label', '设置录制开始与结束快捷键');
-    $('recording-shortcut-note').textContent = '按一次开始，再按一次结束并保存';
+    $('recording-shortcut-note').textContent = '按一次开始，再按一次结束并命名';
     document.querySelector('.demo-badge').textContent = 'DESKTOP APP';
-    document.querySelector('.sidebar-bottom').innerHTML = '<strong><span class="dot"></span>自动保存</strong>结束录制后，脚本会自动保存在本机的脚本库中。';
+    document.querySelector('.sidebar-bottom').innerHTML = '<strong><span class="dot"></span>本地脚本库</strong>结束录制后，为脚本命名并确认保存，即可在执行页使用。';
     document.querySelector('.footer-note').textContent = '脚本仅在选定窗口位于前台且尺寸一致时执行。';
-    document.querySelector('.help').textContent = '在目标窗口按快捷键开始录制，再按一次结束并自动保存。';
+    document.querySelector('.help').textContent = '设置窗口名称与快捷键，在指定窗口按一次开始，再按一次结束并命名保存。';
     $('hotkey-select').replaceChildren(...['F8', 'F9', 'F10', 'F11'].map(key => {
       const option = document.createElement('option'); option.value = key; option.textContent = key; return option;
     }));
     $('execution-refresh-windows').addEventListener('click', () => send('refresh'));
     $('execution-window-select').addEventListener('change', event => send('select', { value: event.target.value }));
     $('hotkey-select').addEventListener('change', event => send('hotkey', { value: event.target.value }));
+    $('recording-window-title').addEventListener('change', event => {
+      if (!isBusy()) send('recordingTarget', { value: event.target.value });
+    });
+    $('recording-window-title').addEventListener('focus', () => { if (!isBusy()) send('refresh'); });
     $('execution-hotkey').addEventListener('change', event => send('hotkey', { value: event.target.value }));
     $('nav-editor').addEventListener('click', () => navigate('editor'));
     $('nav-execution').addEventListener('click', () => navigate('execution'));
@@ -323,8 +411,14 @@
     for (const id of ['mode-once', 'mode-count', 'mode-continuous', 'repeat-count', 'repeat-interval'])
       $(id).addEventListener('change', submitExecution);
     $('execution-start').addEventListener('click', () => send('run'));
-    $('record-button').addEventListener('click', () => send('record'));
-    $('finish-button').addEventListener('click', () => send('finish'));
+    $('recording-name-dialog').addEventListener('cancel', event => event.preventDefault());
+    $('recording-name-confirm').addEventListener('click', saveRecording);
+    $('recording-name-input').addEventListener('keydown', event => {
+      if (event.key === 'Enter') { event.preventDefault(); saveRecording(); }
+    });
+    $('recording-name-discard').addEventListener('click', () => {
+      if (state?.namingRequired && window.confirm('确定放弃本次录制吗？本次录制的步骤将不会保存。')) send('discardRecording');
+    });
     $('add-text').addEventListener('click', () => {
       const value = window.prompt('输入回放时要写入的文字');
       if (value) send('text', { value });

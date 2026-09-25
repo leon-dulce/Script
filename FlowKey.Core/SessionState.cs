@@ -10,7 +10,7 @@ public sealed class SessionState
     {
         "running" => ShortcutAction.StopRun,
         "recording" => ShortcutAction.FinishRecording,
-        "paused" => ShortcutAction.ResumeRecording,
+        "paused" => ShortcutAction.FinishRecording,
         _ when !recordingWorkspace && !hasSteps => ShortcutAction.SelectScript,
         _ when !hasTarget => ShortcutAction.SelectTarget,
         _ when recordingWorkspace => ShortcutAction.StartRecording,

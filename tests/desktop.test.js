@@ -36,6 +36,14 @@ function desktop() {
       if (!this.disabled) this.listeners.change?.({ target: this });
     }
     scrollIntoView(options) { scrolled.push({ row: this, options }); }
+    showModal() { this.open = true; this.showCount = (this.showCount || 0) + 1; }
+    close() { this.open = false; }
+    focus() { document.activeElement = this; this.listeners.focus?.(); }
+    dispatch(name, fields = {}) {
+      const event = { target: this, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; }, ...fields };
+      this.listeners[name]?.(event);
+      return event;
+    }
   }
   const elements = new Map();
   const get = id => {
@@ -72,6 +80,7 @@ function desktop() {
   const state = (overrides = {}) => ({
     workspace: 'editor', mode: 'ready', message: '已选择窗口', currentStep: -1, currentIteration: 0,
     waitingForNextRun: false, pendingRun: false, pendingRecord: false, dirty: false, selectedId: '123',
+    recordingTargetTitle: '记事本', namingRequired: false, namingError: '',
     windows: [{ id: '123', title: '记事本', process: 'notepad' }],
     savedScripts: [
       { id: 'a', name: '测试脚本', stepCount: 1, mode: 'Once' },
@@ -90,34 +99,74 @@ function descendants(element) {
   return element.children.flatMap(child => [child, ...descendants(child)]);
 }
 
-test('recording has only start/finish and shortcut controls, and needs no mouse window selection', () => {
+test('recording configures exact window title and shortcut without manual start or finish buttons', () => {
   const { get, select, sent, state, push } = desktop();
   assert.equal(sent[0].action, 'refresh');
-  push(state({ selectedId: '', script: { ...state().script, clientWidth: 0, clientHeight: 0, steps: [] } }));
+  push(state({ selectedId: '', recordingTargetTitle: '', script: { ...state().script, clientWidth: 0, clientHeight: 0, steps: [] } }));
   for (const id of ['load-button', 'save-button', 'new-editor-script', 'pause-button', 'window-select',
     'refresh-windows', 'script-name-row', 'open-execution', 'plan-summary', 'run-button',
-    'recording-progress']) assert.equal(get(id).hidden, true, id);
+    'recording-progress', 'record-button', 'finish-button']) assert.equal(get(id).hidden, true, id);
   assert.equal(get('sidebar-library').hidden, true);
-  assert.equal(get('record-button').disabled, false);
+  assert.equal(get('recording-target-config').hidden, false);
   assert.equal(get('add-text').disabled, true);
-  assert.match(get('window-name').textContent, /快捷键确认/);
-  assert.match(select('.help').textContent, /再按一次自动保存/);
+  assert.match(get('window-name').textContent, /先设置窗口名称/);
+  assert.match(select('.help').textContent, /先设置完整窗口名称/);
   get('hotkey-select').change('F9');
   assert.equal(sent.at(-1).action, 'hotkey');
   assert.equal(sent.at(-1).value, 'F9');
-  get('record-button').click();
-  assert.equal(sent.at(-1).action, 'record');
-  push(state({ pendingRecord: true, selectedId: '' }));
-  assert.equal(get('record-button').querySelector('span').textContent, '取消等待录制');
-  get('record-button').click();
-  assert.equal(sent.at(-1).action, 'record');
-  push(state());
+  get('recording-window-title').focus();
+  assert.equal(sent.at(-1).action, 'refresh');
+  get('recording-window-title').change('日报.txt — 记事本');
+  assert.equal(sent.at(-1).action, 'recordingTarget');
+  assert.equal(sent.at(-1).value, '日报.txt — 记事本');
+  push(state({ recordingTargetTitle: '日报.txt — 记事本', selectedId: '' }));
+  assert.match(select('.help').textContent, /「日报.txt — 记事本」按 F10/);
+  assert.match(select('.help').textContent, /命名并确认后/);
   const messagesBeforeLegacyClick = sent.length;
+  get('record-button').click();
+  get('finish-button').click();
   get('run-button').click();
-  assert.equal(sent.length, messagesBeforeLegacyClick, 'removed recording shortcut has no navigation handler');
+  assert.equal(sent.length, messagesBeforeLegacyClick, 'removed controls have no desktop handlers');
   get('nav-execution').click();
   assert.equal(sent.at(-1).action, 'workspace');
   assert.equal(sent.at(-1).value, 'execution');
+});
+
+test('recording target suggestions refresh without replacing active title input and show configuration failures', () => {
+  const { get, sent, state, push } = desktop();
+  push(state({ windows: [
+    { id: '1', title: '记事本', process: 'notepad' },
+    { id: '2', title: '报告 — 表格', process: 'excel' },
+    { id: '3', title: '记事本', process: 'notepad' }
+  ] }));
+  assert.equal(get('recording-window-options').children.length, 2);
+  assert.equal(get('recording-window-options').children[1].value, '报告 — 表格');
+  get('recording-window-title').focus();
+  get('recording-window-title').value = '正在输入的标题';
+  push(state());
+  assert.equal(get('recording-window-title').value, '正在输入的标题');
+  get('recording-window-title').change('');
+  assert.equal(sent.at(-1).action, 'recordingTarget');
+  assert.equal(sent.at(-1).value, '');
+  push(state({ recordingTargetTitle: '', selectedId: '', message: '请先设置要录制的窗口名称。' }));
+  assert.match(get('status-hint').textContent, /先设置/);
+  push(state({ mode: 'recording' }));
+  assert.equal(get('recording-window-title').disabled, true);
+  const before = sent.length;
+  get('recording-window-title').change('别的窗口');
+  get('recording-window-title').focus();
+  assert.equal(sent.length, before);
+});
+
+test('an empty unsaved recording cannot add text even after its target dimensions were captured', () => {
+  const { get, sent, state, push } = desktop();
+  push(state({ script: { ...state().script, id: 'empty-recording', name: '', steps: [] } }));
+  assert.equal(get('add-text').disabled, true);
+  const before = sent.length;
+  get('add-text').click();
+  assert.equal(sent.length, before);
+  push(state());
+  assert.equal(get('add-text').disabled, false, 'saved named scripts remain editable');
 });
 
 test('recording open-script and ready progress stay absent after updates and navigation', () => {
@@ -128,6 +177,8 @@ test('recording open-script and ready progress stay absent after updates and nav
     push(state(update));
     assert.equal(get('run-button').hidden, true);
     assert.equal(get('recording-progress').hidden, true);
+    assert.equal(get('record-button').hidden, true);
+    assert.equal(get('finish-button').hidden, true);
   }
   push(state({ workspace: 'execution', mode: 'running', currentStep: 0 }));
   assert.equal(get('execution-progress-label').textContent, '执行中');
@@ -165,7 +216,7 @@ test('all saved scripts appear only on the execution page and host confirms work
 
 test('navigation and script switching are blocked during recording, playback, or pending work', () => {
   for (const busyState of [{ mode: 'recording' }, { mode: 'paused' }, { mode: 'running' },
-    { pendingRecord: true }, { pendingRun: true }]) {
+    { pendingRecord: true }, { pendingRun: true }, { namingRequired: true }]) {
     const { get, sent, state, push } = desktop();
     push(state(busyState));
     assert.equal(get('nav-execution').disabled, true);
@@ -178,21 +229,154 @@ test('navigation and script switching are blocked during recording, playback, or
   }
 });
 
-test('finishing an active or paused recording asks host to finish and shows automatic save result', () => {
+test('ending a recording opens a naming dialog and confirmation saves then opens execution', () => {
   const { get, sent, state, push } = desktop();
-  for (const mode of ['recording', 'paused']) {
-    push(state({ mode }));
-    assert.equal(get('finish-button').hidden, false);
-    assert.equal(get('finish-button').textContent, '结束并保存');
-    get('finish-button').click();
-    assert.equal(sent.at(-1).action, 'finish');
+  const pendingName = { namingRequired: true, script: { ...state().script, id: 'new', name: '' } };
+  push(state(pendingName));
+  assert.equal(get('recording-name-dialog').open, true);
+  assert.equal(get('recording-name-input').value, '');
+  assert.match(get('status-text').textContent, /等待命名保存/);
+  assert.equal(get('add-text').disabled, true);
+  assert.equal(sent.some(message => ['save', 'saveRecording'].includes(message.action)), false);
+  get('recording-name-input').value = '  每日报告  ';
+  push(state(pendingName));
+  assert.equal(get('recording-name-input').value, '  每日报告  ', 'host updates retain typed name');
+  assert.equal(get('recording-name-dialog').showCount, 1);
+  get('recording-name-confirm').click();
+  assert.equal(sent.at(-1).action, 'saveRecording');
+  assert.equal(sent.at(-1).name, '每日报告');
+  assert.equal(get('recording-name-dialog').open, true, 'dialog waits for successful host response');
+  push(state({ workspace: 'execution', script: { ...state().script, name: '每日报告' }, message: '已保存「每日报告」。' }));
+  assert.equal(get('recording-name-dialog').open, false);
+  assert.equal(get('execution-view').hidden, false);
+  assert.equal(get('sidebar-library').hidden, false);
+  assert.equal(get('execution-script-name').textContent, '每日报告');
+});
+
+test('naming rejects blank and overly long names, retains errors and retries after save failures', () => {
+  const { get, sent, state, push } = desktop();
+  const pendingName = { namingRequired: true, script: { ...state().script, name: '' } };
+  push(state(pendingName));
+  get('recording-name-input').value = '   ';
+  get('recording-name-confirm').click();
+  assert.equal(sent.length, 1);
+  assert.match(get('recording-name-error').textContent, /请输入/);
+  get('recording-name-input').value = '名'.repeat(101);
+  get('recording-name-confirm').click();
+  assert.equal(sent.length, 1);
+  assert.match(get('recording-name-error').textContent, /100/);
+  get('recording-name-input').value = '名'.repeat(100);
+  get('recording-name-input').dispatch('keydown', { key: 'Enter' });
+  assert.equal(sent.at(-1).action, 'saveRecording');
+  assert.equal(sent.at(-1).name.length, 100);
+  push(state({ ...pendingName, namingError: '保存失败：磁碟已满，请释放空间后重试。' }));
+  assert.equal(get('recording-name-dialog').open, true);
+  assert.equal(get('recording-name-input').value.length, 100);
+  assert.match(get('recording-name-error').textContent, /磁碟已满/);
+  get('recording-name-input').value = '重新保存';
+  get('recording-name-confirm').click();
+  assert.equal(sent.at(-1).name, '重新保存');
+});
+
+test('Escape cannot silently discard naming, explicit discard requires confirmation', () => {
+  const ui = desktop();
+  const { get, sent, state, push } = ui;
+  push(state({ namingRequired: true }));
+  assert.equal(get('recording-name-dialog').dispatch('cancel').defaultPrevented, true);
+  assert.equal(get('recording-name-dialog').open, true);
+  assert.equal(sent.length, 1);
+  ui.setConfirm(false);
+  get('recording-name-discard').click();
+  assert.equal(sent.length, 1);
+  assert.equal(get('recording-name-dialog').open, true);
+  ui.setConfirm(true);
+  get('recording-name-discard').click();
+  assert.equal(sent.at(-1).action, 'discardRecording');
+  push(state());
+  assert.equal(get('recording-name-dialog').open, false);
+  const count = sent.length;
+  get('recording-name-confirm').click();
+  get('recording-name-discard').click();
+  assert.equal(sent.length, count, 'closed dialog cannot save or discard another script');
+});
+
+test('recording shows each key down and up with its precise interval and follows new rows live', () => {
+  const { get, scrolled, state, push } = desktop();
+  const steps = [
+    { type: 'Key', keys: [162], keyAction: 'Down', delayMs: 7 },
+    { type: 'Key', keys: [65], keyAction: 'Down', delayMs: 123 },
+    { type: 'Key', keys: [65], keyAction: 'Down', delayMs: 350 },
+    { type: 'Key', keys: [65], keyAction: 'Up', delayMs: 13 },
+    { type: 'Key', keys: [162], keyAction: 'Up', delayMs: 123456 }
+  ];
+  push(state({ mode: 'recording', script: { ...state().script, steps: [] } }));
+  assert.equal(scrolled.length, 0);
+  for (let count = 1; count <= steps.length; count++) {
+    push(state({ mode: 'recording', script: { ...state().script, steps: steps.slice(0, count) } }));
+    assert.equal(get('steps').children.length, count);
+    assert.equal(get('step-count').textContent, `${count} 个步骤`);
+    assert.equal(scrolled.length, count);
+    assert.equal(scrolled.at(-1).row, get('steps').children[count - 1]);
   }
-  push(state({ message: '录制结束，已自动保存「测试脚本」。' }));
+  const rows = get('steps').children;
+  assert.equal(rows[0].children[2].children[0].textContent, '按下按键');
+  assert.equal(rows[0].children[2].children[1].textContent, '左 Ctrl');
+  assert.equal(rows[3].children[2].children[0].textContent, '松开按键');
+  assert.equal(rows[3].children[2].children[1].textContent, 'A');
+  for (let index = 0; index < rows.length; index++) {
+    assert.equal(rows[index].children[3].children[0].textContent, `间隔 ${steps[index].delayMs} 毫秒`);
+    assert.equal(rows[index].children[3].children[1].hidden, true);
+  }
+  push(state({ mode: 'recording', script: { ...state().script, steps } }));
+  assert.equal(scrolled.length, steps.length, 'unrelated updates do not repeatedly scroll live recording');
+  push(state({ mode: 'paused', script: { ...state().script, steps } }));
+  assert.equal(scrolled.length, steps.length);
   assert.equal(get('finish-button').hidden, true);
-  assert.equal(get('save-button').hidden, true);
-  assert.match(get('status-hint').textContent, /已自动保存/);
-  assert.equal(get('add-text').disabled, false);
-  assert.equal(sent.filter(message => message.action === 'save').length, 0);
+});
+
+test('key labels cover legacy combinations, modifiers, function keys, number pad and punctuation', () => {
+  const { get, state, push } = desktop();
+  const keyCases = [
+    [[17, 83], undefined, '按键', 'Ctrl + S'],
+    [[16, 9], 'Press', '按键', 'Shift + Tab'],
+    [[161], 'Down', '按下按键', '右 Shift'],
+    [[165], 'Up', '松开按键', '右 Alt'],
+    [[112], 'Down', '按下按键', 'F1'],
+    [[135], 'Up', '松开按键', 'F24'],
+    [[96], 'Down', '按下按键', 'Numpad 0'],
+    [[105], 'Up', '松开按键', 'Numpad 9'],
+    [[107], 'Down', '按下按键', 'Numpad +'],
+    [[48], 'Down', '按下按键', '0'],
+    [[32], 'Up', '松开按键', 'Space'],
+    [[186], 'Down', '按下按键', '; / :'],
+    [[220], 'Down', '按下按键', '\\ / |'],
+    [[255], 'Press', '按键', '按键 0xFF']
+  ];
+  const steps = keyCases.map(([keys, keyAction]) => ({ type: 'Key', keys, keyAction, delayMs: 0 }));
+  push(state({ script: { ...state().script, steps } }));
+  get('steps').children.forEach((row, index) => {
+    assert.equal(row.children[2].children[0].textContent, keyCases[index][2]);
+    assert.equal(row.children[2].children[1].textContent, keyCases[index][3]);
+  });
+});
+
+test('step interval editing accepts full recorded range and rejects invalid values without host mutations', () => {
+  const { get, sent, alerts, state, push } = desktop();
+  push(state());
+  const interval = get('steps').children[0].children[3].children[1];
+  assert.equal(interval.max, '2147483647');
+  assert.equal(interval.step, '1');
+  for (const value of ['-1', '2147483648', '1.5', '', 'NaN']) interval.change(value);
+  assert.equal(sent.length, 1);
+  assert.equal(alerts.length, 5);
+  assert.equal(interval.value, '100');
+  for (const value of ['0', '60001', '2147483647']) {
+    interval.change(value);
+    assert.equal(sent.at(-1).action, 'delay');
+    assert.equal(sent.at(-1).value, Number(value));
+  }
+  push(state({ script: { ...state().script, steps: [{ ...state().script.steps[0], delayMs: 2147483647 }] } }));
+  assert.equal(get('steps').children[0].children[3].children[0].textContent, '间隔 2147483647 毫秒');
 });
 
 test('execution mode and hotkey changes apply directly without save or editor controls', () => {
@@ -269,7 +453,7 @@ test('execution displays every readonly step, highlights the current action, and
   assert.equal(rows.filter(row => row.className.includes('current')).length, 1);
   assert.equal(rows[2]['aria-current'], 'step');
   assert.equal(rows[2].children[2].children[1].textContent, '<script>text stays text</script>');
-  assert.equal(rows[1].children[3].textContent, '立即执行');
+  assert.equal(rows[1].children[3].textContent, '间隔 0 毫秒');
   assert.match(get('execution-current-action').textContent, /第 3 步 · 输入文字/);
   assert.equal(get('execution-progress-fraction').textContent, '3 / 5');
   assert.equal(get('execution-progress-fill').style.width, '60%');
@@ -352,6 +536,10 @@ test('desktop markup has no manual save or new-script control in execution and i
   assert.match(html, /id="execution-steps"/);
   assert.match(html, /id="execution-current-action"/);
   assert.match(html, /id="mode-continuous"/);
+  assert.match(html, /id="recording-window-title"[^>]+list="recording-window-options"/);
+  assert.match(html, /标题完全一致|窗口标题完全一致/);
+  assert.match(html, /<dialog id="recording-name-dialog"/);
+  assert.match(html, /id="recording-name-input"[^>]+maxlength="100"/);
   assert.doesNotMatch(html, /id="save-execution"|id="new-script"|只需三步/);
   const executionMarkup = html.slice(html.indexOf('<div id="execution-view"'));
   assert.doesNotMatch(executionMarkup, /保存设置|未命名脚本|id="script-name"|id="add-text"/);

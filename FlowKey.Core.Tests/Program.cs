@@ -7,6 +7,9 @@ var checks = new (string Name, Action Run)[]
     ("corrupt file reports an error", CorruptFile),
     ("invalid save preserves old file", InvalidSavePreservesFile),
     ("recording coalesces double click and keeps delays", RecordingSteps),
+    ("recording preserves first, inter-key and long delays", RecordingEventDelays),
+    ("key actions persist and legacy keys remain presses", KeyActionPersistence),
+    ("key actions validate active shortcut and event shape", KeyActionValidation),
     ("session rejects overlapping runs and invalid transitions", SessionTransitions),
     ("catalog migrates, lists, updates and deletes scripts", CatalogLifecycle),
     ("execution settings reject invalid ranges", RejectsExecutionSettings)
@@ -203,6 +206,100 @@ static void RecordingSteps()
     Check(steps[2].DelayMs == 0);
 }
 
+static void RecordingEventDelays()
+{
+    var recorder = new StepRecorder();
+    var steps = new List<ScriptStep>();
+    var start = System.Diagnostics.Stopwatch.GetTimestamp();
+    var frequency = System.Diagnostics.Stopwatch.Frequency;
+    recorder.Reset(start);
+    recorder.Add(steps, new ScriptStep { Type = StepType.Key, Keys = [65], KeyAction = KeyAction.Down }, start + frequency / 4);
+    recorder.Add(steps, new ScriptStep { Type = StepType.Key, Keys = [65], KeyAction = KeyAction.Down }, start + frequency / 2);
+    recorder.Add(steps, new ScriptStep { Type = StepType.Key, Keys = [65], KeyAction = KeyAction.Up }, start + frequency);
+    Check(steps.Count == 3 && steps.Select(step => step.KeyAction).SequenceEqual([KeyAction.Down, KeyAction.Down, KeyAction.Up]));
+    Check(steps[0].DelayMs is >= 249 and <= 250 && steps[1].DelayMs is >= 249 and <= 250 && steps[2].DelayMs is >= 499 and <= 500);
+    recorder.Add(steps, new ScriptStep { Type = StepType.Key, Keys = [66], KeyAction = KeyAction.Down }, start + frequency * 62);
+    Check(steps[^1].DelayMs == 61000);
+    recorder.Reset(start);
+    recorder.Add(steps, new ScriptStep { Type = StepType.Key, Keys = [66], KeyAction = KeyAction.Up }, start - frequency);
+    Check(steps[^1].DelayMs == 0);
+    recorder.Reset(start);
+    recorder.Add(steps, new ScriptStep { Type = StepType.Key, Keys = [67] }, start + frequency * 2147484L);
+    Check(steps[^1].DelayMs == int.MaxValue);
+}
+
+static void KeyActionPersistence()
+{
+    var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".json");
+    try
+    {
+        var script = ValidScript();
+        script.Steps =
+        [
+            new() { Type = StepType.Key, Keys = [17, 83] },
+            new() { Type = StepType.Key, Keys = [0xA3], KeyAction = KeyAction.Down, DelayMs = 61000 },
+            new() { Type = StepType.Key, Keys = [0xA3], KeyAction = KeyAction.Up, DelayMs = 145 }
+        ];
+        var store = new ScriptStore(path);
+        store.Save(script);
+        var loaded = store.Load() ?? throw new Exception("Missing key action script");
+        Check(loaded.Steps.Select(step => step.KeyAction).SequenceEqual([KeyAction.Press, KeyAction.Down, KeyAction.Up]));
+        Check(loaded.Steps[1].Keys.SequenceEqual([0xA3]) && loaded.Steps[1].DelayMs == 61000 && loaded.Steps[2].DelayMs == 145);
+        var legacyJson = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path))!;
+        foreach (var step in legacyJson["Steps"]!.AsArray()) step!.AsObject().Remove("KeyAction");
+        File.WriteAllText(path, legacyJson.ToJsonString());
+        Check(store.Load()!.Steps.All(step => step.KeyAction == KeyAction.Press));
+        legacyJson["Steps"]![0]!["KeyAction"] = "Unknown";
+        File.WriteAllText(path, legacyJson.ToJsonString());
+        Throws(() => store.Load());
+    }
+    finally { File.Delete(path); }
+}
+
+static void KeyActionValidation()
+{
+    var script = ValidScript();
+    var step = new ScriptStep { Type = StepType.Key, Keys = [0x11, 0x12, 0x10, 0x5B, 0x53] };
+    script.Steps = [step];
+    ScriptValidator.Validate(script);
+    step.Keys.Add(0x41);
+    Throws(() => ScriptValidator.Validate(script));
+    step.Keys = [0xA2, 0x41];
+    step.KeyAction = KeyAction.Down;
+    Throws(() => ScriptValidator.Validate(script));
+    step.KeyAction = KeyAction.Up;
+    Throws(() => ScriptValidator.Validate(script));
+    step.Keys = [0xA2];
+    ScriptValidator.Validate(script);
+    step.KeyAction = (KeyAction)99;
+    Throws(() => ScriptValidator.Validate(script));
+    step.KeyAction = KeyAction.Down;
+    foreach (var invalidKeys in new List<int>[] { [], [0], [255] })
+    {
+        step.Keys = invalidKeys;
+        Throws(() => ScriptValidator.Validate(script));
+    }
+    foreach (var hotkey in ScriptValidator.Hotkeys)
+    {
+        script.Hotkey = hotkey;
+        foreach (var key in new[] { 119, 120, 121, 122 })
+        {
+            step.Keys = [key];
+            foreach (var action in Enum.GetValues<KeyAction>())
+            {
+                step.KeyAction = action;
+                if (key == 119 + Array.IndexOf(ScriptValidator.Hotkeys, hotkey)) Throws(() => ScriptValidator.Validate(script));
+                else ScriptValidator.Validate(script);
+            }
+        }
+    }
+    step.Keys = [65];
+    step.DelayMs = int.MaxValue;
+    ScriptValidator.Validate(script);
+    step.DelayMs = -1;
+    Throws(() => ScriptValidator.Validate(script));
+}
+
 static void SessionTransitions()
 {
     var session = new SessionState();
@@ -219,7 +316,8 @@ static void SessionTransitions()
     Check(!session.BeginRun() && !session.BeginRecording());
     Check(session.StopRun() && !session.StopRun());
     Check(session.BeginRecording() && session.PauseRecording());
-    Check(session.ResolveShortcut(true, false, true) == ShortcutAction.ResumeRecording);
+    Check(session.ResolveShortcut(true, false, true) == ShortcutAction.FinishRecording);
+    Check(session.ResolveShortcut(false, true, true) == ShortcutAction.FinishRecording);
     Check(!session.BeginRun() && session.BeginRecording());
     Check(session.ResolveShortcut(true, false, true) == ShortcutAction.FinishRecording);
     Check(session.FinishRecording() && session.Mode == "ready");
