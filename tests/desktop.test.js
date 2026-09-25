@@ -49,10 +49,21 @@ test('desktop UI waits for host state and sends explicit actions', () => {
     script: { name: '测试脚本', hotkey: 'F10', steps: [{ type: 'Click', x: 2, y: 3, button: 'Left', delayMs: 100 }] }
   } });
   assert.equal(get('window-name').textContent, '记事本');
+  assert.equal(select('.window-meta small').textContent, 'notepad · 已确认');
   assert.equal(get('script-name').value, '测试脚本');
   assert.equal(get('step-count').textContent, '1 个步骤');
   get('record-button').click();
   assert.equal(sent.at(-1).action, 'record');
+  get('window-select').listeners.change({ target: { value: '123' } });
+  assert.equal(sent.at(-1).action, 'select');
+  assert.equal(sent.at(-1).value, '123');
   get('hotkey-select').listeners.change({ target: { value: 'F11' } });
   assert.equal(sent.at(-1).value, 'F11');
+
+  hostMessage({ data: {
+    mode: 'ready', message: '已确认目标窗口', currentStep: -1, selectedId: '123',
+    windows: [{ id: '123', title: '记事本', process: 'notepad' }],
+    script: { name: '测试脚本', hotkey: 'F10', steps: [] }
+  } });
+  assert.match(select('.help').textContent, /F10 开始录制/);
 });

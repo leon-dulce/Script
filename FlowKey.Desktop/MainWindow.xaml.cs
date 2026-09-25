@@ -97,10 +97,27 @@ public partial class MainWindow : Window
         if (message == Native.HotkeyMessage && wParam == 1)
         {
             handled = true;
-            if (_mode == "running") StopRun("已停止执行。");
-            else if (_mode is "recording" or "paused") FinishRecording();
-            else if (_pendingRecord) { _pendingRecord = false; _message = "已取消等待录制。"; Publish(); }
-            else if (_mode == "ready") StartRun();
+            if (_pendingRecord)
+            {
+                if (_target is { } waitingTarget && IsTargetReady(waitingTarget)) StartRecording(waitingTarget);
+                else { _pendingRecord = false; _message = "已取消等待录制。"; Publish(); }
+                return 0;
+            }
+            switch (_session.ResolveShortcut(_target is not null, _script.Steps.Count > 0))
+            {
+                case ShortcutAction.SelectTarget:
+                    _message = "请先从窗口列表选择并确认目标窗口。";
+                    Publish();
+                    break;
+                case ShortcutAction.StartRecording:
+                case ShortcutAction.ResumeRecording:
+                    ToggleRecording();
+                    Publish();
+                    break;
+                case ShortcutAction.FinishRecording: FinishRecording(); break;
+                case ShortcutAction.StartRun: StartRun(); break;
+                case ShortcutAction.StopRun: StopRun("已停止执行。"); break;
+            }
         }
         return 0;
     }
@@ -184,9 +201,9 @@ public partial class MainWindow : Window
     private void SelectWindow(string? id)
     {
         if (_mode != "ready") return;
-        _target = _windows.Where(w => w.Handle.ToString() == id).Cast<WindowInfo?>().FirstOrDefault();
+        _target = WindowSelection.Find(_windows, id, Native.Matches);
         _pendingRecord = false;
-        _message = _target is null ? "请选择目标窗口。" : $"已选择 {_target.Value.Title}。";
+        _message = _target is null ? "所选窗口不可用，请刷新列表后重选。" : $"已确认目标窗口：{_target.Value.Title}。";
     }
 
     private void SetDelay(JsonElement root)
@@ -215,7 +232,8 @@ public partial class MainWindow : Window
     private void ToggleRecording()
     {
         if (_mode == "recording") { FinishRecording(); return; }
-        if (_mode is not ("ready" or "paused") || _target is not { } target) return;
+        if (_mode is not ("ready" or "paused")) return;
+        if (_target is not { } target) { _message = "请先从窗口列表选择并确认目标窗口。"; return; }
         if (_pendingRecord) { _pendingRecord = false; _message = "已取消等待录制。"; return; }
         if (!Native.Matches(target) || !Native.SameSize(target))
         { _message = "目标窗口已关闭或尺寸变化，请重新选择或录制。"; return; }
@@ -277,18 +295,18 @@ public partial class MainWindow : Window
         if (code >= 0 && _mode == "recording" && (wParam == Native.KeyDown || wParam == Native.SysKeyDown))
         {
             var data = Marshal.PtrToStructure<Native.KeyboardData>(lParam);
-            if ((data.Flags & Native.InjectedKeyboard) == 0 && data.VkCode is not (>= 0x77 and <= 0x7A) && data.VkCode is not (0x10 or 0x11 or 0x12 or 0x5B or 0x5C))
+            var step = KeyboardStepFactory.Create(data.VkCode, data.Flags,
+                IsDown(0x11), IsDown(0x12), IsDown(0x10), IsDown(0x5B) || IsDown(0x5C));
+            if (step is not null)
             {
                 var tick = Stopwatch.GetTimestamp();
-                var keys = new List<int>();
-                foreach (var modifier in new[] { 0x11, 0x12, 0x10, 0x5B })
-                    if ((Native.GetAsyncKeyState(modifier) & 0x8000) != 0) keys.Add(modifier);
-                keys.Add((int)data.VkCode);
-                Dispatcher.BeginInvoke(() => AddRecordedStep(new ScriptStep { Type = StepType.Key, Keys = keys }, tick));
+                Dispatcher.BeginInvoke(() => AddRecordedStep(step, tick));
             }
         }
         return Native.CallNextHookEx(_keyboardHook, code, wParam, lParam);
     }
+
+    private static bool IsDown(int key) => (Native.GetAsyncKeyState(key) & 0x8000) != 0;
 
     private nint OnMouse(int code, nint wParam, nint lParam)
     {
@@ -336,7 +354,8 @@ public partial class MainWindow : Window
     private void StartRun()
     {
         if (_mode != "ready" || _playback is not null) return;
-        if (_target is not { } target || _script.Steps.Count == 0) { _message = "请先选择窗口并准备至少一个步骤。"; Publish(); return; }
+        if (_target is not { } target) { _message = "请先选择目标窗口。"; Publish(); return; }
+        if (_script.Steps.Count == 0) { _message = "脚本尚无步骤；按快捷键可开始录制。"; Publish(); return; }
         if (!IsTargetReady(target)) { _message = "目标窗口必须位于前台，且尺寸与录制时一致。"; Publish(); return; }
         if (_script.ClientWidth != target.Width || _script.ClientHeight != target.Height ||
             (_script.TargetProcessPath.Length > 0 && !string.Equals(_script.TargetProcessPath, target.ProcessPath, StringComparison.OrdinalIgnoreCase)))

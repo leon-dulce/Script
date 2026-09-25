@@ -100,6 +100,7 @@
     select.value = state.selectedId;
     select.disabled = state.mode !== 'ready';
     $('window-name').textContent = selected ? selected.title : '尚未选择目标窗口';
+    document.querySelector('.window-meta small').textContent = selected ? `${selected.process} · 已确认` : '请选择当前可见窗口';
     $('hotkey-select').value = state.script.hotkey;
     if (document.activeElement !== $('script-name')) $('script-name').value = state.script.name;
     $('script-name').disabled = state.mode !== 'ready';
@@ -120,6 +121,11 @@
     $('progress-label').textContent = state.mode === 'running' ? '执行中' : '准备就绪';
     $('progress-fraction').textContent = `${state.mode === 'running' ? state.currentStep + 1 : 0} / ${state.script.steps.length}`;
     $('progress-fill').style.width = state.script.steps.length && state.mode === 'running' ? `${(state.currentStep + 1) * 100 / state.script.steps.length}%` : '0%';
+    document.querySelector('.help').textContent = state.mode === 'recording'
+      ? `按 ${state.script.hotkey} 结束录制。`
+      : state.script.steps.length === 0
+        ? `确认目标窗口后，切回该窗口按 ${state.script.hotkey} 开始录制；再次按下结束。`
+        : `切回目标窗口按 ${state.script.hotkey} 执行脚本；再次按下停止。`;
     renderSteps();
     if (state.message !== lastMessage) {
       lastMessage = state.message;
@@ -135,7 +141,7 @@
     $('pause-button').hidden = true;
     $('refresh-windows').hidden = false;
     $('window-select').style.maxWidth = '240px';
-    document.querySelector('.window-meta small').textContent = '当前可见窗口 · Windows 桌面应用';
+    document.querySelector('.window-meta small').textContent = '请选择当前可见窗口';
     document.querySelectorAll('.nav button:not(.active)').forEach(button => { button.hidden = true; });
     $('add-text').hidden = false;
     $('script-name-row').hidden = false;
@@ -143,7 +149,7 @@
     document.querySelector('.demo-badge').textContent = 'DESKTOP APP';
     document.querySelector('.sidebar-bottom').innerHTML = '<strong><span class="dot"></span>本地模式</strong>脚本保存在本机。录制敏感输入前请暂停。';
     document.querySelector('.footer-note').textContent = '脚本仅在选定窗口位于前台且尺寸一致时执行。';
-    document.querySelector('.help').textContent = '请切回目标窗口后按快捷键启动或停止。点击执行会检查目标窗口是否在前台。';
+    document.querySelector('.help').textContent = '确认目标窗口后，切回该窗口按快捷键开始录制。';
     $('hotkey-select').replaceChildren(...['F8', 'F9', 'F10', 'F11'].map(key => {
       const option = document.createElement('option'); option.value = key; option.textContent = key; return option;
     }));

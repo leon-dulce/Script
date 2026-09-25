@@ -111,11 +111,17 @@ static void RecordingSteps()
 static void SessionTransitions()
 {
     var session = new SessionState();
+    Check(session.ResolveShortcut(false, false) == ShortcutAction.SelectTarget);
+    Check(session.ResolveShortcut(true, false) == ShortcutAction.StartRecording);
+    Check(session.ResolveShortcut(true, true) == ShortcutAction.StartRun);
     Check(session.Mode == "ready" && session.BeginRun());
+    Check(session.ResolveShortcut(true, true) == ShortcutAction.StopRun);
     Check(!session.BeginRun() && !session.BeginRecording());
     Check(session.StopRun() && !session.StopRun());
     Check(session.BeginRecording() && session.PauseRecording());
+    Check(session.ResolveShortcut(true, false) == ShortcutAction.ResumeRecording);
     Check(!session.BeginRun() && session.BeginRecording());
+    Check(session.ResolveShortcut(true, false) == ShortcutAction.FinishRecording);
     Check(session.FinishRecording() && session.Mode == "ready");
 }
 

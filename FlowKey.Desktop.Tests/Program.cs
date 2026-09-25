@@ -21,6 +21,21 @@ finally
 }
 Console.WriteLine("PASS Win32 layouts, module handle, window enumeration, and input hooks");
 
+var sampleWindow = new WindowInfo((nint)123, 1, "测试窗口", "test", "", 800, 600);
+var selectedWindow = WindowSelection.Find([sampleWindow], "123", _ => true);
+if (selectedWindow is null || selectedWindow.Value.Handle != sampleWindow.Handle) throw new Exception("Window selection failed.");
+if (WindowSelection.Find([sampleWindow], "123", _ => false) is not null) throw new Exception("Closed window was selected.");
+Console.WriteLine("PASS window selection retains the chosen handle");
+
+var normalKey = KeyboardStepFactory.Create(0x41, 0, false, false, false, false);
+var shortcutKey = KeyboardStepFactory.Create(0x53, 0, true, false, false, false);
+if (normalKey is null || normalKey.Keys.Count != 1 || normalKey.Keys[0] != 0x41 ||
+    shortcutKey is null || !shortcutKey.Keys.SequenceEqual([0x11, 0x53]) ||
+    KeyboardStepFactory.Create(0x79, 0, false, false, false, false) is not null ||
+    KeyboardStepFactory.Create(0x41, Native.InjectedKeyboard, false, false, false, false) is not null)
+    throw new Exception("Keyboard recording conversion failed.");
+Console.WriteLine("PASS physical keys and combinations become recordable steps");
+
 var assetsRoot = Path.Combine(Path.GetTempPath(), "FlowKey-assets-test-" + Guid.NewGuid().ToString("N"));
 try
 {

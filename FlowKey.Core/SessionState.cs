@@ -1,8 +1,20 @@
 namespace FlowKey.Core;
 
+public enum ShortcutAction { SelectTarget, StartRecording, ResumeRecording, FinishRecording, StartRun, StopRun }
+
 public sealed class SessionState
 {
     public string Mode { get; private set; } = "ready";
+
+    public ShortcutAction ResolveShortcut(bool hasTarget, bool hasSteps) => Mode switch
+    {
+        "running" => ShortcutAction.StopRun,
+        "recording" => ShortcutAction.FinishRecording,
+        "paused" => ShortcutAction.ResumeRecording,
+        _ when !hasTarget => ShortcutAction.SelectTarget,
+        _ when !hasSteps => ShortcutAction.StartRecording,
+        _ => ShortcutAction.StartRun
+    };
 
     public bool BeginRecording()
     {
