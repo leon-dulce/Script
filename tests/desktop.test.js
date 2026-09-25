@@ -573,3 +573,18 @@ test('settings cannot interrupt recording, execution, pending start or naming', 
     assert.equal(sent.length,before);
   }
 });
+
+
+test('settings navigation sits immediately above the local library footer', () => {
+  assert.match(html, /class="nav sidebar-settings"[\s\S]*?id="nav-settings"[\s\S]*?<\/nav>\s*<div class="sidebar-bottom">/);
+  assert.equal((html.match(/id="nav-settings"/g)||[]).length,1);
+  assert.match(html, /\.sidebar-settings\{margin-top:auto;/);
+});
+test('automatic switching shows pending feedback and supports cancelling instead of asking for manual focus', () => {
+  const {get,state,push,sent}=desktop();
+  push(state({workspace:'execution',pendingRun:true,switchingWindow:true,flow:{autoSwitch:true,returnToApp:true,targetTitle:'目标',targetId:'123'}}));
+  assert.match(get('execution-help').textContent,/正在自动切换/);
+  get('execution-start').click(); assert.equal(sent.at(-1).action,'run');
+  push(state({workspace:'execution',message:'未找到指定窗口「目标」。请先开启该程序。'}));
+  assert.match(get('execution-message').textContent,/未找到指定窗口/);
+});

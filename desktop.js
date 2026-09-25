@@ -141,7 +141,7 @@
     $('execution-start').textContent = active ? '■ 停止执行' : '▶ 开始执行';
     $('execution-start').className = `button ${active ? 'danger' : 'primary'}`;
     $('execution-help').textContent = state.pendingRun
-      ? '已准备执行，切回目标窗口后开始；再次点击可取消等待。'
+      ? (state.switchingWindow ? '正在自动切换窗口，就绪后开始；再次点击可取消。' : '已准备执行，切回目标窗口后开始；再次点击可取消等待。')
       : state.mode === 'running' ? `再按 ${state.script.hotkey} 可停止执行。`
         : !saved ? '请从左侧选择要执行的已保存脚本。'
           : !state.script.steps.length ? '此脚本没有可执行的步骤。'
