@@ -2,9 +2,11 @@
 
 FlowKey 是 Windows 指定窗口脚本录制工具。桌面版使用 .NET 10、WPF、WebView2 和 Win32 API；根目录的 `index.html` 仍可在浏览器中打开，作为不控制电脑的界面演示。
 
+**要启动程序，请双击本资料夹最上层的 [FlowKey.exe](FlowKey.exe)。这就是最新的 Windows 执行档。** `dist/archive` 保存旧版与测试产物，`dist/FlowKey-single` 是建置用目录。
+
 ## 运行桌面版
 
-Windows x64 用户可直接运行发布的 `FlowKey.exe`。它内含 .NET Runtime 和界面资源，不需要与其他项目档案放在一起；电脑仍需安装 [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)。
+Windows x64 用户可直接运行资料夹最上层的 `FlowKey.exe`。它内含 .NET Runtime 和界面资源，不需要与其他项目档案放在一起；电脑仍需安装 [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)。
 
 从源码运行需准备 .NET 10 SDK。在 Windows PowerShell 中执行：
 
@@ -16,7 +18,7 @@ dotnet run --project FlowKey.Desktop/FlowKey.Desktop.csproj
 
 ```powershell
 dotnet publish FlowKey.Desktop/FlowKey.Desktop.csproj -c Release -o dist/FlowKey-single
-Copy-Item dist/FlowKey-single/FlowKey.Desktop.exe dist/FlowKey.exe
+Copy-Item dist/FlowKey-single/FlowKey.Desktop.exe FlowKey.exe
 ```
 
 在「录制与编辑」中刷新并选择当前可见的目标窗口，界面会显示「已确认」。新脚本没有步骤时，切回该窗口按设定的全局快捷键（默认 F10）即可开始录制，再按一次结束。也可点击「开始录制」后切回目标窗口。切离目标窗口会自动暂停；切回后点击「继续录制」，或按快捷键恢复。在工具中检查步骤、删除误操作、修改等待毫秒数，或手动添加与编辑文字步骤，然后保存。
