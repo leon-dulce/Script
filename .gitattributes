@@ -1,1 +1,1 @@
-FlowKey[[:space:]]1.1X1.exe filter=lfs diff=lfs merge=lfs -text
+FlowKey.exe filter=lfs diff=lfs merge=lfs -text

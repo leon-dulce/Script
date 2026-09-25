@@ -19,7 +19,7 @@ FlowKey 是一款適用於 Windows 的本機鍵盤操作錄製與回放工具。
 
 ### 使用方式
 
-1. 在專案根目錄按兩下 `FlowKey 1.1X1.exe`，並允許 Windows 的系統管理員權限提示。首次啟動若缺少 WebView2，程式會自動下載及安裝；遇到問題時會顯示原因與官方下載網址。
+1. 在專案根目錄按兩下 `FlowKey.exe`，並允許 Windows 的系統管理員權限提示。首次啟動若缺少 WebView2，程式會自動下載及安裝；遇到問題時會顯示原因與官方下載網址。
 2. 在「錄製與編輯」頁面選擇快捷鍵，按下快捷鍵或點選「開始錄製」。
 3. 在需要操作的視窗輸入按鍵；完成後再次按下快捷鍵或點選「停止錄製」，為腳本命名並儲存。
 4. 前往「執行腳本」，選擇腳本與執行方式，再以快捷鍵或「開始執行」啟動。再次按下快捷鍵可停止執行。
@@ -37,7 +37,7 @@ dotnet run --project FlowKey.Desktop/FlowKey.Desktop.csproj
 dotnet publish FlowKey.Desktop/FlowKey.Desktop.csproj -c Release -o dist/FlowKey-single
 ```
 
-從原始碼發布後，可執行 `dist/FlowKey-single/FlowKey.Desktop.exe`。根目錄提供可直接按兩下執行的 `FlowKey 1.1X1.exe`。
+從原始碼發布後，可執行 `dist/FlowKey-single/FlowKey.Desktop.exe`。根目錄提供可直接按兩下執行的 `FlowKey.exe`。
 
 ## English
 
@@ -54,7 +54,7 @@ FlowKey is a local Windows application for recording and replaying keyboard acti
 
 ### Basic workflow
 
-1. Double-click `FlowKey 1.1X1.exe` in the project root and approve the Windows administrator prompt. On first launch, FlowKey downloads and installs WebView2 if needed; it shows an explanation and the official download page if setup fails.
+1. Double-click `FlowKey.exe` in the project root and approve the Windows administrator prompt. On first launch, FlowKey downloads and installs WebView2 if needed; it shows an explanation and the official download page if setup fails.
 2. On **Record & Edit**, choose a shortcut and start recording with the shortcut or the on-screen button.
 3. Type in the window you want to capture. Stop recording, give the script a name, and save it.
 4. On **Run Scripts**, select the script and playback mode. Start with the shortcut or the on-screen button; press the shortcut again to stop.
@@ -72,7 +72,7 @@ dotnet run --project FlowKey.Desktop/FlowKey.Desktop.csproj
 dotnet publish FlowKey.Desktop/FlowKey.Desktop.csproj -c Release -o dist/FlowKey-single
 ```
 
-After publishing from source, run `dist/FlowKey-single/FlowKey.Desktop.exe`. The repository root also provides `FlowKey 1.1X1.exe` for direct launch.
+After publishing from source, run `dist/FlowKey-single/FlowKey.Desktop.exe`. The repository root also provides `FlowKey.exe` for direct launch.
 
 ## 開發與驗證 / Development and verification
 
