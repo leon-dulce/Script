@@ -38,6 +38,7 @@ internal static class Native
     [DllImport("user32.dll")] internal static extern nint CallNextHookEx(nint hook, int code, nint wParam, nint lParam);
     [DllImport("user32.dll")] internal static extern bool SetCursorPos(int x, int y);
     [DllImport("user32.dll")] internal static extern short GetAsyncKeyState(int key);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] internal static extern nint GetModuleHandle(string? moduleName);
     [DllImport("user32.dll", SetLastError = true)] internal static extern uint SendInput(uint count, [In] Input[] input, int size);
 
     [StructLayout(LayoutKind.Explicit, Size = 40)]

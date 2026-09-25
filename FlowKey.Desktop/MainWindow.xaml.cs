@@ -227,8 +227,9 @@ public partial class MainWindow : Window
             _script.ClientHeight = target.Height;
         }
         _recorder.Reset();
-        _keyboardHook = Native.SetWindowsHookEx(Native.KeyboardHook, _keyboardCallback, 0, 0);
-        _mouseHook = Native.SetWindowsHookEx(Native.MouseHook, _mouseCallback, 0, 0);
+        var module = Native.GetModuleHandle(null);
+        _keyboardHook = Native.SetWindowsHookEx(Native.KeyboardHook, _keyboardCallback, module, 0);
+        _mouseHook = Native.SetWindowsHookEx(Native.MouseHook, _mouseCallback, module, 0);
         if (_keyboardHook == 0 || _mouseHook == 0)
         {
             StopHooks(); _session.FinishRecording(); _message = "无法启用输入监听。"; return;

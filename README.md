@@ -26,6 +26,7 @@ dotnet publish FlowKey.Desktop/FlowKey.Desktop.csproj -c Release -r win-x64 --se
 
 ```powershell
 dotnet run --project FlowKey.Core.Tests/FlowKey.Core.Tests.csproj
+dotnet run --project FlowKey.Desktop.Tests/FlowKey.Desktop.Tests.csproj
 dotnet build FlowKey.Desktop/FlowKey.Desktop.csproj
 node --test
 node --check desktop.js
