@@ -6,7 +6,7 @@ namespace FlowKey.Desktop;
 
 internal static class WebAssets
 {
-    internal static readonly string[] Names = ["index.html", "app.js", "desktop.js", "desktop-ui.css", "branding.css", "assets/flowkey.svg", "assets/NotoSerifTC.ttf", "assets/OFL-NotoSerifTC.txt"];
+    internal static readonly string[] Names = ["index.html", "desktop.js", "desktop-ui.css", "branding.css", "assets/flowkey.svg", "assets/NotoSerifTC.ttf", "assets/OFL-NotoSerifTC.txt"];
 
     internal static string ExtractTo(string root)
     {

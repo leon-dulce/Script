@@ -26,7 +26,6 @@
     <ProjectReference Include="../FlowKey.Core/FlowKey.Core.csproj" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3595.46" />
     <EmbeddedResource Include="../index.html" LogicalName="FlowKey.Assets.index.html" />
-    <EmbeddedResource Include="../app.js" LogicalName="FlowKey.Assets.app.js" />
     <EmbeddedResource Include="../desktop.js" LogicalName="FlowKey.Assets.desktop.js" />
     <EmbeddedResource Include="../desktop-ui.css" LogicalName="FlowKey.Assets.desktop-ui.css" />
     <EmbeddedResource Include="../branding.css" LogicalName="FlowKey.Assets.branding.css" />

@@ -23,28 +23,14 @@ test('desktop workspace uses readable dark surfaces without web application badg
   }
 });
 
-test('demo server serves image, font and stylesheet resources with correct MIME types', () => {
-  const {handle} = require('./preview-demo.cjs');
-  for (const [url, type, prefix] of [['/assets/flowkey.svg','image/svg+xml','<svg'],['/branding.css','text/css; charset=utf-8','@font-face'],['/assets/NotoSerifTC.ttf','font/ttf',null]]) {
-    const headers = {}; let body;
-    handle({url},{setHeader:(k,v)=>headers[k]=v,end:v=>body=v});
-    assert.equal(headers['Content-Type'],type);
-    assert.ok(body.length>0);
-    if (prefix) assert.ok(body.toString().startsWith(prefix));
-  }
-  let status;
-  handle({url:'/missing.svg'}, {writeHead:value=>status=value,end:()=>{}});
-  assert.equal(status,404,'Missing images must not silently return HTML');
-});
-
-test('production and demo share an offline logo and readable serif heading typography', () => {
-  for (const file of ['index.html','FlowKey-UI-Demo.html']) {
+test('production UI uses an offline logo and readable serif heading typography', () => {
+  for (const file of ['index.html']) {
     const html = read(file);
     assert.doesNotMatch(html, /rem-theme|rem-character|rem-banner|雷姆/);
     assert.match(html, /lang="zh-Hant"/);
     assert.match(html, /href="branding.css"/);
     const encoded = html.match(/src="data:image\/svg\+xml;base64,([^"]+)"/);
-    assert.ok(encoded, 'Logo is embedded so a preview URL or moved HTML cannot break its image path');
+    assert.ok(encoded, 'Logo is embedded so asset paths cannot break its image');
     assert.equal(Buffer.from(encoded[1], 'base64').toString('utf8').replace(/\r\n/g, '\n'), read('assets/flowkey.svg').replace(/\r\n/g, '\n'));
   }
   const css = read('branding.css');
@@ -57,6 +43,18 @@ test('production and demo share an offline logo and readable serif heading typog
   const font = fs.readFileSync(path.join(root, 'assets/NotoSerifTC.ttf'));
   assert.equal(font.readUInt32BE(0), 0x00010000);
   assert.match(read('assets/OFL-NotoSerifTC.txt'), /SIL OPEN FONT LICENSE/);
+});
+
+test('only the production HTML and script are packaged', () => {
+  const html = read('index.html');
+  const project = read('FlowKey.Desktop/FlowKey.Desktop.csproj');
+  const assets = read('FlowKey.Desktop/WebAssets.cs');
+  assert.match(html, /<script src="desktop\.js"><\/script>/);
+  assert.doesNotMatch(html, /app\.js|介面演示版|操作和視窗均為模擬/);
+  assert.match(project, /EmbeddedResource Include="\.\.\/index\.html"/);
+  assert.doesNotMatch(project + assets, /app\.js|FlowKey-UI-Demo/);
+  for (const name of ['FlowKey-UI-Demo.html', 'app.js', 'tests/preview-demo.cjs'])
+    assert.equal(fs.existsSync(path.join(root, name)), false, `${name} should not ship`);
 });
 
 test('executable and window use the same multi-resolution icon built from the UI SVG', () => {

@@ -33,9 +33,9 @@ for element in svg:
         raise ValueError(f'Unsupported logo shape: {tag}')
 image.resize((256, 256), Image.Resampling.LANCZOS).save(root / 'flowkey.png')
 image.save(root / 'flowkey.ico', sizes=[(s,s) for s in [16,20,24,32,40,48,64,128,256]])
-# Keep the HTML mark independent of preview-server routes or adjacent image files.
+# Keep the application mark independent of adjacent image files.
 uri = 'data:image/svg+xml;base64,' + base64.b64encode((root / 'flowkey.svg').read_text(encoding='utf-8').encode()).decode()
-for name in ['index.html', 'FlowKey-UI-Demo.html']:
+for name in ['index.html']:
     page = root.parent / name
     html = page.read_text(encoding='utf-8')
     html, count = re.subn(r'src="(?:assets/flowkey.svg|data:image/svg\+xml;base64,[^"]+)"', 'src="' + uri + '"', html)
