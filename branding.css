@@ -1,0 +1,9 @@
+@font-face{font-family:"FlowKey Serif";src:url("assets/NotoSerifTC.ttf") format("truetype");font-weight:200 900;font-display:swap}
+:root{font-family:"Microsoft JhengHei UI","Microsoft JhengHei","Segoe UI",sans-serif;font-synthesis:none}
+h1,h2,.card-title,.brand{font-family:"FlowKey Serif","Noto Serif TC","PMingLiU",serif;font-weight:600;letter-spacing:.025em}
+h1{line-height:1.5!important}h2,.card-title{line-height:1.6}
+.brand{font-size:25px!important;letter-spacing:.01em!important}
+.brand .brand-icon,.brand .brand-mark{width:36px;height:36px;display:block;border:0;padding:0;background:none;box-shadow:none;border-radius:0;flex:none}
+.brand img{display:block;width:36px;height:36px}
+button,input,select{font-family:"Microsoft JhengHei UI","Microsoft JhengHei","Segoe UI",sans-serif}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #465fff;outline-offset:3px}
