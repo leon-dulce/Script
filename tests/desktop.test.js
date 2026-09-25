@@ -121,8 +121,8 @@ test('global recording starts without a target and has no target or add-text con
   for (const id of ['recording-target-config', 'recording-window-card', 'add-text', 'run-button', 'recording-progress']) assert.equal(get(id).hidden, true);
   assert.equal(get('record-button').hidden, false);
   assert.equal(get('record-button').disabled, false);
-  assert.match(select('.help').textContent, /切換視窗會繼續記錄/);
-  assert.match(descendants(get('steps')).map(e => e.textContent).join(' '), /可切換到其他視窗/);
+  assert.match(select('.help').textContent, /切換視窗也會繼續錄製/);
+  assert.match(descendants(get('steps')).map(e => e.textContent).join(' '), /再切到你要操作的視窗/);
   assert.doesNotMatch(descendants(get('steps')).map(e => e.textContent).join(' '), /先設定視窗名稱/);
   get('hotkey-select').change('F9');
   assert.equal(sent.at(-1).action, 'hotkey');
@@ -222,7 +222,7 @@ test('ending a recording opens a naming dialog and confirmation saves then opens
   push(state(pendingName));
   assert.equal(get('recording-name-dialog').open, true);
   assert.equal(get('recording-name-input').value, '');
-  assert.match(get('status-text').textContent, /等待命名儲存/);
+  assert.match(get('status-text').textContent, /幫腳本取個名字/);
   assert.equal(get('add-text').disabled, true);
   assert.equal(sent.some(message => ['save', 'saveRecording'].includes(message.action)), false);
   get('recording-name-input').value = '  每日報告  ';
@@ -459,7 +459,7 @@ test('execution displays every readonly step, highlights the current action, and
   assert.equal(get('execution-steps').children[0]['aria-current'], 'step');
   push(state({ workspace: 'execution', script: running.script }));
   assert.equal(get('execution-steps').children.some(row => row.className.includes('current')), false);
-  assert.match(get('execution-current-action').textContent, /等待執行/);
+  assert.match(get('execution-current-action').textContent, /開始後，這裡會顯示/);
 });
 
 test('execution can be requested without manual target selection and displays pending or failure feedback', () => {
@@ -472,7 +472,7 @@ test('execution can be requested without manual target selection and displays pe
   push(state({ workspace: 'execution', selectedId: '', pendingRun: true, message: '切回目標視窗後開始。' }));
   assert.equal(get('execution-start').textContent, '■ 停止執行');
   assert.equal(get('execution-progress-label').textContent, '等待目標視窗');
-  assert.equal(get('execution-current-action').textContent, '等待目標視窗進入前臺');
+  assert.equal(get('execution-current-action').textContent, '切到要操作的視窗，就會開始。');
   assert.match(get('execution-help').textContent, /再次點選可取消等待/);
   assert.doesNotMatch(get('execution-help').textContent, /按快捷鍵可取消/);
   get('execution-start').click();
@@ -494,7 +494,7 @@ test('execution does not expose an unsaved recording draft when no saved script 
   assert.equal(get('execution-start').disabled, true);
   assert.equal(get('delete-script').disabled, true);
   assert.equal(get('mode-once').disabled, true);
-  assert.match(get('saved-scripts').children[0].textContent, /結束錄製後/);
+  assert.match(get('saved-scripts').children[0].textContent, /取個名字儲存後/);
   assert.match(get('execution-help').textContent, /選擇/);
   assert.doesNotMatch(get('execution-script-name').textContent, /未儲存|未命名/);
 });
@@ -506,7 +506,7 @@ test('switching protects only failed autosaves and deletion requires confirmatio
   ui.setConfirm(false);
   get('saved-scripts').children[1].click();
   assert.equal(sent.length, 1);
-  assert.match(confirmations[0], /自動儲存失敗/);
+  assert.match(confirmations[0], /修改還沒儲存成功/);
   ui.setConfirm(true);
   get('saved-scripts').children[1].click();
   assert.equal(sent.at(-1).action, 'openScript');
@@ -577,7 +577,7 @@ test('settings page exposes four flow combinations and confirms changes through 
   get('flow-target').change('123'); assert.equal(sent.at(-1).targetId,'123');
   get('flow-refresh').click(); assert.equal(sent.at(-1).action,'refresh');
   push(state({workspace:'settings',flow:{autoSwitch:true,returnToApp:false,targetId:'',targetTitle:'舊視窗',message:'儲存失敗'}}));
-  assert.match(get('flow-target-note').textContent,/未找到/);
+  assert.match(get('flow-target-note').textContent,/找不到/);
   assert.equal(get('flow-save-status').textContent,'儲存失敗');
 });
 

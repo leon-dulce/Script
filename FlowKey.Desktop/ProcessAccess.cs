@@ -27,7 +27,7 @@ internal static class ProcessAccess
 
     internal static string RecordingWarning(bool elevated, bool? foregroundElevated) =>
         !elevated && foregroundElevated == true
-            ? "前臺程式以管理員許可權執行，當前 FlowKey 可能無法錄到按鍵。請停止並儲存本次錄製，再以管理員模式重新開啟。"
+            ? "你正在操作的程式使用管理員權限，FlowKey 可能錄不到按鍵。請先停止並儲存，再以管理員模式重新開啟 FlowKey。"
             : "";
 
     internal static ProcessStartInfo RestartInfo(string executable, string hotkey) => new(executable)
@@ -44,13 +44,13 @@ internal static class ProcessAccess
         try
         {
             if (!(start ?? (info => Process.Start(info) is not null))(RestartInfo(executable, hotkey)))
-            { error = "未能啟動管理員模式，當前視窗已保留。"; return false; }
+            { error = "沒有成功開啟管理員模式，你目前的視窗會保留。"; return false; }
             error = "";
             return true;
         }
         catch (Win32Exception e)
         {
-            error = e.NativeErrorCode == 1223 ? "已取消管理員授權，當前視窗已保留。" : "無法啟動管理員模式：" + e.Message;
+            error = e.NativeErrorCode == 1223 ? "已取消管理員授權，你目前的視窗會保留。" : "無法啟動管理員模式：" + e.Message;
             return false;
         }
     }

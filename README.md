@@ -12,6 +12,10 @@ FlowKey 是 Windows 全域键盘脚本录制工具。桌面版使用 .NET 10、W
 
 **要启动程序，请双击本资料夹最上层的 [FlowKey.exe](FlowKey.exe)。这就是最新的 Windows 执行档。** `dist/archive` 保存旧版与测试产物，`dist/FlowKey-single` 是建置用目录。
 
+## 對話框與提示
+
+命名、刪除、放棄錄製、輸入檢查與啟動錯誤使用一致的暗色對話框。確認視窗預設停在取消按鈕；關閉視窗也不會同意刪除或放棄。提示採用簡短、自然的繁體中文，保留失敗原因、數值範圍與無法復原等重要資訊。
+
 ## 运行桌面版
 
 Windows x64 用户双击资料夹最上层的 `FlowKey.exe`，在 Windows 管理员授权窗口选择允许后启动；取消授权则不会启动。它内含 .NET Runtime 和界面资源，不需要与其他项目档案放在一起；电脑仍需安装 [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)。

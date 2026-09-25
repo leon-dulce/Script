@@ -28,7 +28,7 @@ public partial class MainWindow : Window
     private FlowPreferences _flowPreferences = new();
     private WindowInfo? _flowTargetIdentity;
     private WindowActivationWait? _activationWait;
-    private string _flowMessage = "修改後自動儲存，適用於所有腳本。";
+    private string _flowMessage = "改好就會儲存，所有腳本都會使用這組設定。";
     private string FlowSettingsPath => Path.Combine(_dataDirectory, "settings.json");
     private string _recordingHotkey = "F10";
     private bool _namingRequired;
@@ -39,7 +39,7 @@ public partial class MainWindow : Window
     private int _hotkeyCode = 121;
     private string? _registeredHotkey;
     private string _mode => _session.Mode;
-    private string _message = "設定快捷鍵後即可開始錄製。";
+    private string _message = "選好快捷鍵，就可以開始錄製了。";
     private int _currentStep = -1;
     private long _currentIteration;
     private CancellationTokenSource? _playback;
@@ -62,7 +62,7 @@ public partial class MainWindow : Window
         SourceInitialized += (_, _) => WindowTheme.Apply(new WindowInteropHelper(this).Handle);
         try { _flowPreferences = FlowPreferences.Load(FlowSettingsPath); }
         catch (Exception error) when (error is IOException or JsonException or UnauthorizedAccessException)
-        { _flowMessage = "設定未能載入，暫用手動切換：" + error.Message; }
+        { _flowMessage = "上次的設定沒有讀取成功，這次先用手動切換：" + error.Message; }
         Loaded += OnLoaded;
         Closing += OnClosing;
         Closed += OnClosed;
@@ -90,7 +90,7 @@ public partial class MainWindow : Window
                 _message = $"按 {_recordingHotkey} 或點選「開始錄製」開始；再次按下結束並命名儲存。";
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException)
-        { _message = $"載入腳本庫失敗：{error.Message}"; }
+        { _message = $"腳本庫沒有讀取成功：{error.Message}"; }
         RegisterShortcut(_script.Hotkey);
         RefreshWindows();
         try
@@ -101,6 +101,19 @@ public partial class MainWindow : Window
             Browser.CoreWebView2.SetVirtualHostNameToFolderMapping("flowkey.local", assetDirectory, CoreWebView2HostResourceAccessKind.DenyCors);
             Browser.CoreWebView2.Settings.AreDevToolsEnabled = false;
             Browser.CoreWebView2.Settings.IsWebMessageEnabled = true;
+            Browser.CoreWebView2.Settings.AreDefaultScriptDialogsEnabled = false;
+            Browser.CoreWebView2.ScriptDialogOpening += (_, dialog) =>
+            {
+                var deferral = dialog.GetDeferral();
+                Dispatcher.BeginInvoke(() =>
+                {
+                    try
+                    {
+                        if (FlowDialog.Ask(this, dialog.Message, dialog.Kind == CoreWebView2ScriptDialogKind.Confirm)) dialog.Accept();
+                    }
+                    finally { deferral.Complete(); }
+                });
+            };
             Browser.CoreWebView2.WebMessageReceived += OnWebMessage;
             Browser.CoreWebView2.NavigationStarting += (_, args) =>
             {
@@ -110,7 +123,7 @@ public partial class MainWindow : Window
             {
                 if (!args.IsSuccess)
                 {
-                    MessageBox.Show($"無法載入內建介面：{args.WebErrorStatus}", "FlowKey");
+                    FlowDialog.Ask(this, $"畫面沒有順利開啟，請關閉後再試一次。\n錯誤資訊：{args.WebErrorStatus}");
                     Close();
                     return;
                 }
@@ -119,7 +132,7 @@ public partial class MainWindow : Window
             };
             Browser.Source = new Uri("https://flowkey.local/index.html");
         }
-        catch (Exception error) { MessageBox.Show($"無法啟動介面：{error.Message}\n請安裝 WebView2 Runtime。", "FlowKey"); Close(); }
+        catch (Exception error) { FlowDialog.Ask(this, $"FlowKey 沒有順利開啟。請確認已安裝 WebView2 Runtime，再試一次。\n錯誤資訊：{error.Message}"); Close(); }
     }
 
     private void OnClosing(object? sender, CancelEventArgs e)
@@ -131,7 +144,7 @@ public partial class MainWindow : Window
         }
         if (!_namingRequired) return;
         e.Cancel = true;
-        _namingError = "請先確認儲存，或放棄本次錄製後再關閉。";
+        _namingError = "這次錄製還沒儲存。請先取個名字儲存，或選擇不儲存，再關閉視窗。";
         Dispatcher.BeginInvoke(ShowNamingPrompt);
     }
 
@@ -149,6 +162,7 @@ public partial class MainWindow : Window
         if (message == Native.HotkeyMessage && wParam == 1)
         {
             handled = true;
+            if (OwnedWindows.OfType<FlowDialog>().Any(dialog => dialog.IsVisible)) return 0;
             if (_workspace == "settings") return 0;
             if (_namingRequired) { ShowNamingPrompt(); return 0; }
             if (_workspace == "execution" && _mode == "ready")
@@ -255,7 +269,7 @@ public partial class MainWindow : Window
             var action = root.GetProperty("action").GetString();
             if (_namingRequired && action is not ("saveRecording" or "discardRecording" or "refresh"))
             {
-                _namingError = "請先輸入名稱並確認儲存，或放棄本次錄製。";
+                _namingError = "這次錄製還沒儲存。請先取個名字，或選擇不儲存。";
                 Publish();
                 return;
             }
@@ -300,7 +314,7 @@ public partial class MainWindow : Window
             }
         }
         catch (Exception error) when (error is JsonException or KeyNotFoundException or ArgumentOutOfRangeException or InvalidOperationException)
-        { _message = "操作內容無效，請重試。"; }
+        { _message = "這次操作沒有成功，請再試一次。"; }
         Publish();
     }
 
@@ -310,7 +324,7 @@ public partial class MainWindow : Window
         _target = WindowSelection.Find(_windows, id, Native.Matches);
         _pendingRecord = false;
         _pendingRun = false;
-        _message = _target is null ? "所選視窗不可用，請重新整理列表後重選。" : $"已確認目標視窗：{_target.Value.Title}。";
+        _message = _target is null ? "這個視窗目前無法使用，請重新整理後再選一次。" : $"已確認目標視窗：{_target.Value.Title}。";
     }
 
     private void SetWorkspace(string? workspace)
@@ -343,7 +357,7 @@ public partial class MainWindow : Window
             _executionScript = _savedScripts.FirstOrDefault(s => s.Id == _executionScript?.Id) ?? _savedScripts.FirstOrDefault();
             _script = _executionScript ?? new ScriptDocument { Hotkey = _recordingHotkey };
             if (RegisterShortcut(_script.Hotkey))
-                _message = _executionScript is null ? "請先完成一次錄製，已儲存腳本會顯示在左側。" : $"已選擇「{_script.Name}」，切到目標視窗按 {_script.Hotkey} 執行。";
+                _message = _executionScript is null ? "先錄一段操作並儲存，腳本就會出現在左側。" : $"已選擇「{_script.Name}」，切到目標視窗按 {_script.Hotkey} 執行。";
         }
         _dirty = false;
     }
@@ -361,14 +375,14 @@ public partial class MainWindow : Window
             else
             {
                 var selected = WindowSelection.Find(Native.ListWindows(_handle), id, Native.Matches);
-                if (selected is not { } target) { _flowMessage = "視窗已關閉，請重新整理後重新選擇。"; return; }
+                if (selected is not { } target) { _flowMessage = "這個視窗已經關閉，請開啟後重新整理，再選一次。"; return; }
                 next = next with { TargetTitle = target.Title, TargetProcess = target.ProcessName, TargetPath = target.ProcessPath };
                 nextTarget = target;
             }
         }
-        try { next.Save(FlowSettingsPath); _flowPreferences = next; _flowTargetIdentity = nextTarget; _flowMessage = "已自動儲存，適用於所有腳本。"; }
+        try { next.Save(FlowSettingsPath); _flowPreferences = next; _flowTargetIdentity = nextTarget; _flowMessage = "設定已儲存，所有腳本都會使用這組設定。"; }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
-        { _flowMessage = "儲存失敗，仍使用先前設定：" + error.Message; }
+        { _flowMessage = "這次設定沒有存好，先保留原本的設定：" + error.Message; }
     }
 
     private void RefreshCatalog()
@@ -384,7 +398,7 @@ public partial class MainWindow : Window
         try
         {
             var script = _catalog.Load(id);
-            if (script is null) { _message = "找不到此腳本，請重新整理腳本庫。"; return; }
+            if (script is null) { _message = "找不到這個腳本，請重新整理腳本庫後再試一次。"; return; }
             _script = script;
             _executionScript = script;
             _target = null;
@@ -402,7 +416,7 @@ public partial class MainWindow : Window
         if (_mode != "ready" || _workspace != "execution" || id is null) return;
         try
         {
-            if (!_catalog.Delete(id)) { _message = "腳本已不存在。"; return; }
+            if (!_catalog.Delete(id)) { _message = "這個腳本已經被刪除了。"; return; }
             RefreshCatalog();
             if (_recordingDraft.Id == id) _recordingDraft = new ScriptDocument { Hotkey = _recordingHotkey };
             if (_executionScript?.Id == id) _executionScript = _savedScripts.FirstOrDefault();
@@ -413,7 +427,7 @@ public partial class MainWindow : Window
                 _pendingRun = false;
                 RegisterShortcut(_script.Hotkey);
             }
-            _message = "腳本已從本機刪除。";
+            _message = "腳本已刪除。";
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException)
         { _message = $"刪除失敗：{error.Message}"; }
@@ -447,7 +461,7 @@ public partial class MainWindow : Window
         if (count is < 1 or > 10000 || interval is < 100 or > 60000) throw new InvalidOperationException();
         _script.Execution = new ExecutionPlan { Mode = mode, RepeatCount = count, IntervalMs = interval };
         _dirty = true;
-        SaveScript("執行方式已自動儲存。");
+        SaveScript("執行方式已儲存。");
     }
 
     private void SetText(JsonElement root)
@@ -512,7 +526,7 @@ public partial class MainWindow : Window
         catch (InvalidOperationException error) { _message = error.Message; Publish(); return; }
         _recorder.Reset(_keyboardCapture.StartedAt);
         _session.BeginRecording();
-        _message = $"正在錄製每個按鍵與間隔；再按 {_recordingHotkey} 停止並命名儲存。";
+        _message = $"正在錄製。操作完成後，再按 {_recordingHotkey} 停止並儲存。";
         Publish();
     }
 
@@ -525,13 +539,13 @@ public partial class MainWindow : Window
         if (_script.Steps.Count == 0)
         {
             _dirty = false;
-            _message = "錄製已結束，本次沒有操作步驟，未建立腳本。";
+            _message = "這次沒有錄到按鍵，所以沒有建立腳本。可以再試一次。";
         }
         else
         {
             _namingRequired = true;
             _namingError = "";
-            _message = "錄製已停止，請輸入腳本名稱，確認後儲存到執行腳本。";
+            _message = "錄好了，幫這段操作取個名字吧。儲存後就能再次執行。";
             ShowNamingPrompt();
         }
         Publish();
@@ -551,7 +565,7 @@ public partial class MainWindow : Window
         var value = name?.Trim() ?? "";
         if (value.Length is < 1 or > 100)
         {
-            _namingError = "請輸入 1–100 個字元的腳本名稱。";
+            _namingError = "幫腳本取個名字吧，長度請在 1–100 個字元之間。";
             return;
         }
         _script.Name = value;
@@ -559,7 +573,7 @@ public partial class MainWindow : Window
         _namingRequired = false;
         _namingError = "";
         SetWorkspace("execution");
-        _message = $"已儲存「{value}」，可選擇執行方式後執行。";
+        _message = $"「{value}」已儲存。選好執行方式，就可以使用了。";
     }
 
     private void DiscardRecording()
@@ -570,7 +584,7 @@ public partial class MainWindow : Window
         _namingRequired = false;
         _namingError = "";
         _dirty = false;
-        _message = "已放棄本次錄製。快捷鍵設定已保留。";
+        _message = "已不儲存這次錄製。快捷鍵設定已保留。";
     }
 
     private void StopHooks()
@@ -632,7 +646,7 @@ public partial class MainWindow : Window
             if (result == ActivationStatus.Missing)
             { _message = MissingFlowTargetMessage(); Publish(); return; }
             if (result == ActivationStatus.TimedOut)
-            { _message = "視窗切換未完成，本次沒有執行。請確認目標視窗可用後重試。"; Publish(); return; }
+            { _message = "沒有順利切到目標視窗，這次還沒執行。請確認視窗已開啟，再試一次。"; Publish(); return; }
             // Restore can change the client size; capture the settled dimensions before preflight.
             var activated = _target!.Value;
             if (Native.GetClientRect(activated.Handle, out var rect))
@@ -655,7 +669,7 @@ public partial class MainWindow : Window
         if (_mode == "running") { StopRun("已停止執行。"); return; }
         if (_mode != "ready" || _workspace != "execution") return;
         if (_pendingRun) { _pendingRun = false; _activationWait = null; _message = "已取消等待執行。"; Publish(); return; }
-        if (_playback is not null) { _message = "上一輪執行正在結束，請稍後再啟動。"; Publish(); return; }
+        if (_playback is not null) { _message = "上一輪還在收尾，請稍等一下再開始。"; Publish(); return; }
         if (_script.Steps.Count == 0 || !_savedScripts.Any(s => s.Id == _script.Id))
         { _message = "請先從左側選擇有操作步驟的已儲存腳本。"; Publish(); return; }
         if (_flowPreferences.AutoSwitch)
@@ -691,7 +705,7 @@ public partial class MainWindow : Window
     }
 
     private string MissingFlowTargetMessage() => _flowPreferences.TargetTitle.Length == 0
-        ? "尚未設定指定視窗，請到設定頁選擇執行視窗。"
+        ? "還沒選擇要操作的視窗，請先到「設定」選一個。"
         : $"未找到指定視窗「{_flowPreferences.TargetTitle}」。請先開啟該程式；若已開啟，請重新整理設定中的視窗列表並重新選擇（同名視窗也需重選）。";
 
     private string? RunPreflight(WindowInfo target)
@@ -713,7 +727,7 @@ public partial class MainWindow : Window
         { _message = "請先選擇有操作步驟的已儲存腳本。"; Publish(); return; }
         var problem = RunPreflight(target);
         if (problem is not null) { _message = problem; Publish(); return; }
-        if (Native.GetForegroundWindow() != target.Handle) { _message = "目標視窗必須位於前臺。"; Publish(); return; }
+        if (Native.GetForegroundWindow() != target.Handle) { _message = "請先切到要操作的視窗，再開始執行。"; Publish(); return; }
         _playback = new CancellationTokenSource();
         _session.BeginRun(); _currentStep = -1; _currentIteration = 0; _waitingForNextRun = false;
         _message = "正在執行；再按快捷鍵可停止。";
@@ -756,7 +770,7 @@ public partial class MainWindow : Window
                     if (!IsTargetReady(target))
                     { StopRun("目標視窗發生變化，已停止執行。"); cancellation.ThrowIfCancellationRequested(); }
                 }, run.Token);
-            StopRun($"腳本執行完成，共 {_currentIteration} 輪。", run);
+            StopRun($"執行完成，這次一共跑了 {_currentIteration} 輪。", run);
         }
         catch (OperationCanceledException) { /* StopRun already updated the UI. */ }
         catch (Exception error) { StopRun($"執行失敗：{error.Message}", run); }
@@ -774,7 +788,7 @@ public partial class MainWindow : Window
             {
                 await Task.Delay(100);
                 if (ReferenceEquals(_playback, run) && IsVisible && !Native.ActivateWindow(_handle))
-                { _message += " 無法自動返回 FlowKey，請點選工作列開啟。"; Publish(); }
+                { _message += " 沒有順利切回 FlowKey，請從工作列開啟。"; Publish(); }
             }
             if (ReferenceEquals(_playback, run)) { _playback = null; run.Dispose(); }
             if (ReferenceEquals(_playbackKeyboard, keyboard)) _playbackKeyboard = null;

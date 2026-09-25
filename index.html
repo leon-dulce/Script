@@ -51,16 +51,16 @@
 <div id="workspace-view"><div class="title-row">
 <div><p class="eyebrow">AUTOMATION WORKSPACE</p><h1>錄製與編輯</h1><p class="subtitle" id="recording-subtitle">為指定視窗錄製步驟，儲存後使用快捷鍵隨時執行。</p></div>
 </div>
-<div aria-label="錄製概覽" class="record-overview"><div class="card metric-card"><span class="metric-label">已記錄動作</span><div><strong id="record-total">0</strong><span class="metric-unit">個動作</span></div></div><div class="card metric-card"><span class="metric-label">腳本總時長</span><div><strong id="record-seconds">0.0</strong><span class="metric-unit">秒</span></div></div><div class="card metric-info"><h2>每個動作，都清楚可見</h2><p>保留按下、放開與動作間隔。<br/>結束錄製後命名，即可加入腳本庫。</p></div></div><section aria-labelledby="target-title" class="card pad record-controls">
+<div aria-label="錄製概覽" class="record-overview"><div class="card metric-card"><span class="metric-label">已記錄動作</span><div><strong id="record-total">0</strong><span class="metric-unit">個動作</span></div></div><div class="card metric-card"><span class="metric-label">腳本總時長</span><div><strong id="record-seconds">0.0</strong><span class="metric-unit">秒</span></div></div><div class="card metric-info"><h2>錄下你的操作</h2><p>按下、放開和中間的等待，都會記下來。<br/>錄好後取個名字，下次就能直接使用。</p></div></div><section aria-labelledby="target-title" class="card pad record-controls">
 <div class="card-header"><div><h2 class="card-title" id="target-title">目標視窗</h2><p class="card-note" id="recording-target-note">腳本只會在選定視窗處於前臺時執行</p></div><span class="card-label">01 / 目標</span></div>
 <div class="recording-target-config" hidden="" id="recording-target-config"><label for="recording-window-title">要錄製的視窗名稱</label><input aria-describedby="recording-window-hint" autocomplete="off" id="recording-window-title" list="recording-window-options" maxlength="1024" placeholder="輸入或選擇完整視窗名稱" type="text"/><datalist id="recording-window-options"></datalist><small id="recording-window-hint">名稱須與視窗標題完全一致（包括空格和標點）。設定後切到該視窗，按快捷鍵開始或結束錄製。</small></div>
 <div class="window-card" id="recording-window-card"><div aria-hidden="true" class="window-icon">W</div><div class="window-meta"><strong id="window-name">記事本 — 每週報告.txt</strong><small>示例視窗 · Windows 桌面應用</small></div><select aria-label="選擇示例視窗" id="window-select"><option value="記事本 — 每週報告.txt">記事本</option><option value="瀏覽器 — 工作臺">瀏覽器</option><option value="Excel — 任務清單.xlsx">Excel</option></select><button class="muted-link" hidden="" id="refresh-windows" type="button">重新整理</button></div>
 <div hidden="" id="script-name-row" style="margin-bottom:16px;color:#9ba9c2;font-size:12px"><label for="script-name">腳本名稱</label> <input id="script-name" maxlength="100" style="margin-left:10px;background:#202b42;color:#eaf0ff;border:1px solid #394964;border-radius:8px;padding:6px 9px"/></div>
-<p hidden="" id="recording-access-warning" role="alert"></p><div class="status-strip"><div class="state-label"><span class="pulse" id="status-dot"></span><span id="status-text">就緒，等待操作</span></div><span id="status-hint">當前已載入示例腳本</span></div>
+<p hidden="" id="recording-access-warning" role="alert"></p><div class="status-strip"><div class="state-label"><span class="pulse" id="status-dot"></span><span id="status-text">準備好了</span></div><span id="status-hint">當前已載入示例腳本</span></div>
 <div class="hotkey-box"><div class="hotkey-symbol">⌨</div><div class="hotkey-copy"><small>啟動 / 停止快捷鍵</small><strong>自定義快捷鍵</strong></div><select aria-label="選擇執行快捷鍵" id="hotkey-select"><option>F10</option><option>F12</option><option>F8</option><option>F9</option></select></div><div class="title-actions"><button class="button" hidden="" id="new-editor-script" type="button">＋ 新建腳本</button><button class="button" hidden="" id="load-button" type="button">重新載入</button><button class="button" id="save-button" type="button"><svg viewbox="0 0 24 24"><path d="M5 3h12l4 4v14H3V3h2Zm2 0v6h10V3M6 21v-8h12v8"></path></svg>儲存腳本</button><button class="button" hidden="" id="restart-admin" type="button">以管理員模式重新開啟</button><button class="button" hidden="" id="finish-button" type="button">結束錄製</button><button class="button" hidden="" id="pause-button" type="button">暫停錄製</button><button class="button primary" id="record-button" type="button"><svg viewbox="0 0 24 24"><circle cx="12" cy="12" r="8"></circle></svg><span>開始錄製</span></button></div></section><div class="content">
 <div>
 <section aria-labelledby="steps-title" class="card timeline" style="margin-top:20px">
-<div class="timeline-top"><div><h2 class="card-title" id="steps-title">錄製步驟</h2><p class="card-note">檢視每一步操作，並調整等待時間</p></div><span class="step-count" id="step-count">0 個步驟</span></div>
+<div class="timeline-top"><div><h2 class="card-title" id="steps-title">錄製步驟</h2><p class="card-note">看看剛才錄了什麼，也可以調整每一步的等待時間。</p></div><span class="step-count" id="step-count">0 個步驟</span></div>
 <div aria-live="polite" class="steps" id="steps"></div>
 <button class="muted-link" id="add-step" type="button">＋ 新增示例操作</button><button class="muted-link" hidden="" id="add-text" type="button">＋ 新增文字步驟</button>
 </section>
@@ -74,7 +74,7 @@
 </div>
 </div></div>
 <div hidden="" id="execution-view">
-<div class="title-row"><div><p class="eyebrow">RUN WORKSPACE</p><h1>執行腳本</h1><p class="subtitle">從左側選擇腳本，在目標視窗按快捷鍵啟動；每個執行步驟都會即時高亮。</p></div><div class="title-actions"></div></div>
+<div class="title-row"><div><p class="eyebrow">RUN WORKSPACE</p><h1>執行腳本</h1><p class="subtitle">選好腳本就能開始，正在執行的步驟會標示在下方。</p></div><div class="title-actions"></div></div>
 <div class="execution-layout"><div class="sidebar-library" hidden="" id="sidebar-library"><div class="library-title"><span>已儲存腳本</span><span id="library-count">0</span></div><div class="saved-scripts" id="saved-scripts"></div><div class="library-actions"><button id="delete-script" type="button">刪除當前腳本</button></div></div>
 <div class="execution-main">
 <section aria-labelledby="execution-steps-title" class="card timeline">
@@ -83,7 +83,7 @@
 <div aria-label="腳本執行步驟" class="steps execution-steps" id="execution-steps"></div>
 </section>
 <section aria-label="執行進度" class="card pad execution-progress-card"><div class="cycle-status"><span>當前輪次</span><strong id="cycle-number">—</strong></div><div class="progress"><span id="execution-progress-label">準備就緒</span><span id="execution-progress-fraction">0 / 0</span></div><div class="track"><div id="execution-progress-fill"></div></div></section></div>
-<div class="execution-controls card"><section aria-labelledby="execution-title" class="card pad execution-plan"><div class="card-header"><div><h2 class="card-title" id="execution-title">執行方式</h2><p class="card-note">調整後自動應用於當前腳本</p></div><span class="card-label">執行設定</span></div>
+<div class="execution-controls card"><section aria-labelledby="execution-title" class="card pad execution-plan"><div class="card-header"><div><h2 class="card-title" id="execution-title">執行方式</h2><p class="card-note">改好就會儲存，不用再按確認。</p></div><span class="card-label">執行設定</span></div>
 <div aria-label="執行方式" class="mode-grid" role="radiogroup">
 <label class="mode-choice"><input checked="" id="mode-once" name="execution-mode" type="radio" value="Once"/><strong>只執行一次</strong><small>從第一步到最後一步，完成後停止。</small></label>
 <label class="mode-choice"><input id="mode-count" name="execution-mode" type="radio" value="Count"/><strong>指定次數</strong><small>按設定次數執行，每輪從頭開始。</small></label>
@@ -99,9 +99,9 @@
 </section></div></div>
 </div>
 <section aria-labelledby="settings-title" hidden="" id="settings-view">
-<div class="title-row"><div><p class="eyebrow">PREFERENCES</p><h1 id="settings-title">設定</h1><p class="subtitle">讓腳本按你的習慣開始與結束。設定適用於所有腳本。</p></div></div>
+<div class="title-row"><div><p class="eyebrow">PREFERENCES</p><h1 id="settings-title">設定</h1><p class="subtitle">選擇開始和結束時要停在哪個視窗。這裡的設定會套用到所有腳本。</p></div></div>
 <div class="settings-grid"><section aria-labelledby="flow-title" class="card pad">
-<div class="card-header"><div><h2 class="card-title" id="flow-title">執行時的視窗切換</h2><p class="card-note">分別選擇開始與結束方式，自由組合。</p></div></div>
+<div class="card-header"><div><h2 class="card-title" id="flow-title">執行時的視窗切換</h2><p class="card-note">開始前要切去哪裡，結束後要不要回來，都可以在這裡設定。</p></div></div>
 <h3 class="card-title">開始執行時</h3>
 <div aria-label="開始執行時" class="mode-grid" role="radiogroup" style="grid-template-columns:repeat(2,minmax(0,1fr))">
 <label class="mode-choice"><input checked="" id="flow-manual" name="flow-start" type="radio"/><strong>我來切換視窗</strong><small>按開始執行後等待，切到目標視窗才執行。</small></label>
@@ -113,11 +113,11 @@
 <label class="mode-choice"><input id="flow-return" name="flow-end" type="radio"/><strong>回到 FlowKey</strong><small>檢視執行結果，方便繼續操作。</small></label>
 <label class="mode-choice"><input checked="" id="flow-stay" name="flow-end" type="radio"/><strong>保持當前視窗</strong><small>結束後不切換，繼續使用目標程式。</small></label>
 </div>
-</section><aside class="card pad settings-summary"><h2>你的執行流程</h2><div class="execution-summary" style="margin-top:24px"><strong>你的操作流程</strong><p aria-live="polite" id="flow-preview"></p></div><p class="card-note" id="flow-save-status" role="status"></p><p class="card-note">持續執行會在按停止後按此設定處理。目標視窗關閉或切換失敗時，不會向其他視窗傳送按鍵。</p></aside></div></section>
+</section><aside class="card pad settings-summary"><h2>執行時會這樣進行</h2><div class="execution-summary" style="margin-top:24px"><strong>執行時會這樣進行</strong><p aria-live="polite" id="flow-preview"></p></div><p class="card-note" id="flow-save-status" role="status"></p><p class="card-note">選擇持續執行時，按停止後才會切換視窗。如果找不到目標視窗或切換失敗，腳本就不會開始。</p></aside></div></section>
 <div class="footer-note"><span>✦</span> 介面演示版 · 操作和視窗均為模擬，不會錄製或控制你的電腦</div>
 </main>
 </div>
-<dialog aria-describedby="recording-name-description" aria-labelledby="recording-name-title" class="recording-name-dialog" id="recording-name-dialog"><h2 id="recording-name-title">為錄製腳本命名</h2><p id="recording-name-description">錄製已結束。請輸入腳本名稱並確認，儲存後即可在腳本庫中執行。</p><label for="recording-name-input">腳本名稱</label><input aria-describedby="recording-name-error" autocomplete="off" id="recording-name-input" maxlength="100" placeholder="例如：每日報表填寫" type="text"/><p class="naming-error" id="recording-name-error" role="alert"></p><button class="button primary" id="recording-name-confirm" type="button">確認並儲存</button><button class="muted-link" id="recording-name-discard" type="button">放棄本次錄製</button></dialog>
+<dialog aria-describedby="recording-name-description" aria-labelledby="recording-name-title" class="recording-name-dialog" id="recording-name-dialog"><h2 id="recording-name-title">錄好了，取個名字吧</h2><p id="recording-name-description">取個容易認得的名字。儲存後，你可以在「執行腳本」裡找到它。</p><label for="recording-name-input">腳本名稱</label><input aria-describedby="recording-name-error" autocomplete="off" id="recording-name-input" maxlength="100" placeholder="例如：每日報表填寫" type="text"/><p class="naming-error" id="recording-name-error" role="alert"></p><button class="button primary" id="recording-name-confirm" type="button">儲存腳本</button><button class="muted-link" id="recording-name-discard" type="button">不儲存這次錄製</button></dialog>
 <div aria-live="polite" class="toast" id="toast" role="status"></div>
 <script src="app.js"></script>
 <script src="desktop.js"></script>

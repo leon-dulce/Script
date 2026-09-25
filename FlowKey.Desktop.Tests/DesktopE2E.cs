@@ -62,6 +62,7 @@ internal static class DesktopE2E
             app.Show();
             Until(() => loaded, "embedded interface did not load", 30000);
             VerifyAppearance(app);
+            VerifyDialogs(app);
             target.Show();
             _keyboardTarget = new WindowInteropHelper(target).Handle;
             AcquireInitialTargetFocus(target, editor);
@@ -181,7 +182,7 @@ internal static class DesktopE2E
             PressHotkey(hotkey);
             Until(() => Text(app, "status-text") == "正在錄製", "empty recording did not start");
             Eval(app, "document.getElementById('record-button').click()");
-            Until(() => Text(app, "status-text") == "就緒，等待操作", "empty recording did not finish");
+            Until(() => Text(app, "status-text") == "準備好了", "empty recording did not finish");
             if (catalog.List().Scripts.Count != 2 || EvalBool(app, "document.getElementById('recording-name-dialog').open"))
                 throw new Exception("An empty recording created a saved script or requested a name.");
             if (!EvalBool(app, "document.getElementById('add-text').disabled"))
@@ -216,7 +217,7 @@ internal static class DesktopE2E
                 Text(app, "execution-current-action").Contains("Y"), "execution did not follow its second step");
             Until(() => Text(app, "execution-current-action").Contains("等待 250 毫秒"), "execution did not display the interval between rounds");
             Until(() => editor.Text == "XYXYXY", "count mode did not run three complete rounds", 12000);
-            Until(() => Text(app, "status-text") == "就緒，等待操作", "count mode did not finish");
+            Until(() => Text(app, "status-text") == "準備好了", "count mode did not finish");
             if (!EvalBool(app, "!document.getElementById('execution-view').hidden"))
                 throw new Exception("Starting execution returned to the recording workspace.");
             if (EvalBool(app, "!!document.querySelector('#execution-steps [aria-current=step]')"))
@@ -228,7 +229,7 @@ internal static class DesktopE2E
             PressHotkey(hotkey);
             Until(() => editor.Text.Length >= 10, "continuous mode did not repeat", 10000);
             PressHotkey(hotkey);
-            Until(() => Text(app, "status-text") == "就緒，等待操作", "hotkey did not stop continuous execution");
+            Until(() => Text(app, "status-text") == "準備好了", "hotkey did not stop continuous execution");
             var stoppedLength = editor.Text.Length;
             PumpFor(1400);
             if (editor.Text.Length != stoppedLength) throw new Exception("Continuous execution continued after stop.");
@@ -240,7 +241,7 @@ internal static class DesktopE2E
             Until(() => Text(app, "execution-progress-label") == "等待目標視窗", "start button did not wait for the target window");
             ActivateTarget(target, editor);
             Until(() => editor.Text.Length == stoppedLength + 2, "once mode did not execute exactly once", 10000);
-            Until(() => Text(app, "status-text") == "就緒，等待操作", "once mode did not finish");
+            Until(() => Text(app, "status-text") == "準備好了", "once mode did not finish");
             PumpFor(1400);
             if (editor.Text.Length != stoppedLength + 2 || !editor.Text.EndsWith("XY")) throw new Exception("Once mode repeated unexpectedly.");
             Console.WriteLine("PASS Windows UI: start button waits for target focus and executes exactly once");
@@ -263,7 +264,7 @@ internal static class DesktopE2E
             keyEvents.Clear();
             ActivateTarget(target, editor);
             PressHotkey(hotkey);
-            Until(() => RelevantKeys().Length >= 4 && Text(app, "status-text") == "就緒，等待操作",
+            Until(() => RelevantKeys().Length >= 4 && Text(app, "status-text") == "準備好了",
                 "recorded key actions did not replay as actual Windows key-down and key-up events");
             if (!RelevantKeys().SequenceEqual(new[] { (Key.Z, false), (Key.Z, true), (functionKey, false), (functionKey, true) }))
                 throw new Exception("Windows key replay did not preserve the recorded down and up sequence.");
@@ -278,7 +279,7 @@ internal static class DesktopE2E
             Until(() => RelevantKeys().Count(e => e.Key == Key.Z && !e.Up) == 1 &&
                 !RelevantKeys().Any(e => e.Up), "held-key replay did not reach the delay before key release");
             PressHotkey(hotkey);
-            Until(() => Text(app, "status-text") == "就緒，等待操作" && RelevantKeys().Any(e => e.Key == Key.Z && e.Up),
+            Until(() => Text(app, "status-text") == "準備好了" && RelevantKeys().Any(e => e.Key == Key.Z && e.Up),
                 "shortcut stop did not release the key held by replay");
             PumpFor(150);
             if (!RelevantKeys().SequenceEqual(new[] { (Key.Z, false), (Key.Z, true) }) ||
@@ -295,7 +296,7 @@ internal static class DesktopE2E
             ActivateTarget(target, editor);
             PressHotkey(hotkey);
             Until(() => editor.Text == beforeMismatch + "XY", "global script could not replay in resized window");
-            Until(() => Text(app, "status-text") == "就緒，等待操作", "selected script did not finish");
+            Until(() => Text(app, "status-text") == "準備好了", "selected script did not finish");
             if (!catalog.Load(firstId)!.GlobalKeyboardRecording || !catalog.Load(secondId)!.GlobalKeyboardRecording)
                 throw new Exception("Global recording scope was not saved.");
             var current = CurrentScript(app);
@@ -549,7 +550,7 @@ internal static class DesktopE2E
         (ScriptDocument)typeof(MainWindow).GetField("_script", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(app)!;
 
     private static void WaitForNaming(MainWindow app) => Until(() =>
-        Text(app, "status-text").Contains("命名") && EvalBool(app, "document.getElementById('recording-name-dialog').open"),
+        Text(app, "status-text").Contains("取個名字") && EvalBool(app, "document.getElementById('recording-name-dialog').open"),
         "finishing a nonempty recording did not open its naming dialog");
 
     private static void ConfirmRecordingName(MainWindow app, string name) => Eval(app,
@@ -585,7 +586,7 @@ internal static class DesktopE2E
                     throw new Exception("Manual flow switched or sent keys before the user switched.");
                 ActivateTarget(target, editor);
             }
-            try { Until(() => editor.Text == "XY" && Text(app, "status-text") == "就緒，等待操作", "flow did not finish playback", 10000); }
+            try { Until(() => editor.Text == "XY" && Text(app, "status-text") == "準備好了", "flow did not finish playback", 10000); }
             catch (TimeoutException) { throw new Exception($"Flow auto={automatic} return={back}: text={editor.Text}, status={Text(app, "status-text")}, message={Text(app, "execution-message")}"); }
             var expected = back ? new WindowInteropHelper(app).Handle : new WindowInteropHelper(target).Handle;
             Until(() => Native.GetForegroundWindow() == expected, "flow completion left the wrong foreground window");
@@ -597,7 +598,7 @@ internal static class DesktopE2E
         Eval(app, "document.getElementById('execution-start').click()");
         Until(() => Text(app, "status-text") == "正在執行腳本", "return-on-stop test did not start");
         Eval(app, "document.getElementById('execution-start').click()");
-        Until(() => Native.GetForegroundWindow() == new WindowInteropHelper(app).Handle && Text(app, "status-text") == "就緒，等待操作",
+        Until(() => Native.GetForegroundWindow() == new WindowInteropHelper(app).Handle && Text(app, "status-text") == "準備好了",
             "manual stop did not return to FlowKey");
         if (editor.Text.Length != 0) throw new Exception("Stopped script continued sending keys.");
         CurrentScript(app).Steps[0].DelayMs = originalDelay;
@@ -612,7 +613,7 @@ internal static class DesktopE2E
         editor.Clear();
         Eval(app, "document.getElementById('execution-start').click()");
         Until(() => Text(app, "execution-message").Contains("未找到指定視窗") && Text(app, "execution-message").Contains("FlowKey closed flow target"), "closed automatic target did not identify the missing window");
-        if (editor.Text.Length != 0 || Text(app, "status-text") != "就緒，等待操作") throw new Exception("Closed target started execution.");
+        if (editor.Text.Length != 0 || Text(app, "status-text") != "準備好了") throw new Exception("Closed target started execution.");
         Eval(app, "document.getElementById('nav-settings').click()");
         Post(app, "{action:'flowSettings',autoSwitch:false,returnToApp:false,targetId:''}");
         Eval(app, "document.getElementById('nav-execution').click()");
@@ -650,12 +651,12 @@ internal static class DesktopE2E
                 "automatic start did not expose cancellable activation wait");
             Eval(app, "document.getElementById('execution-start').click()");
             PumpFor(350);
-            if (received.IsCompleted || Text(app, "status-text") != "就緒，等待操作")
+            if (received.IsCompleted || Text(app, "status-text") != "準備好了")
                 throw new Exception("Cancelled automatic activation still executed the script.");
             ActivateWindow(app);
             Eval(app, "document.getElementById('execution-start').click()");
             Until(() => received.IsCompleted && received.GetAwaiter().GetResult() &&
-                Text(app, "status-text") == "就緒，等待操作" && Native.GetForegroundWindow() == new WindowInteropHelper(app).Handle,
+                Text(app, "status-text") == "準備好了" && Native.GetForegroundWindow() == new WindowInteropHelper(app).Handle,
                 "automatic switch did not deliver script to the separate process and return", 15000);
             Eval(app, "document.getElementById('nav-settings').click()");
             Post(app, "{action:'flowSettings',autoSwitch:false,returnToApp:false,targetId:''}");
@@ -882,6 +883,47 @@ internal static class DesktopE2E
         var code = (ushort)(0x70 + int.Parse(key[1..]) - 1);
         Native.SendKey(code);
         Native.SendKey(code, true);
+    }
+
+    private static void VerifyDialogs(MainWindow app)
+    {
+        foreach (var action in new[] { "accept", "cancel", "close", "alert" })
+        {
+            bool visited = false;
+            var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
+            timer.Tick += (_, _) =>
+            {
+                var dialog = app.OwnedWindows.OfType<FlowDialog>().FirstOrDefault(d => d.IsVisible);
+                if (dialog is null) return;
+                visited = true;
+                timer.Stop();
+                if (dialog.Background.ToString() != "#FF222730" || dialog.Message.Text != "刪除「測試腳本」後就無法復原。確定不要這個腳本了嗎？")
+                    throw new Exception("Dialog theme or message changed.");
+                if (action != "alert" && (!dialog.CancelAction.IsKeyboardFocused || dialog.AcceptAction.IsDefault))
+                    throw new Exception("Destructive dialog did not default to cancellation.");
+                if (action == "close") dialog.Close();
+                else (action == "cancel" ? dialog.CancelAction : dialog.AcceptAction).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            };
+            timer.Start();
+            try
+            {
+                var result = Eval(app, "window." + (action == "alert" ? "alert" : "confirm") + "('刪除「測試腳本」後就無法復原。確定不要這個腳本了嗎？')");
+                if (!visited || (action != "alert" && result != (action == "accept" ? "true" : "false")))
+                    throw new Exception("Styled dialog did not preserve confirmation/cancellation behavior.");
+            }
+            finally { timer.Stop(); }
+        }
+        var longMessage = "<script>這是純文字，不是指令</script>\n" + string.Concat(Enumerable.Repeat("錯誤詳細資訊，請保留這些內容以便檢查。\n", 100));
+        var longDialog = new FlowDialog(app, longMessage, false);
+        bool bounded = false;
+        longDialog.ContentRendered += (_, _) =>
+        {
+            bounded = longDialog.ActualHeight <= 540 && longDialog.Message.Text == longMessage && longDialog.AcceptAction.IsVisible;
+            longDialog.Close();
+        };
+        longDialog.ShowDialog();
+        if (!bounded) throw new Exception("Long dialog content escaped its bounded window or altered the message.");
+        Console.WriteLine("PASS themed native dialogs: WebView alert/confirm bridge, accept, cancel and close preserve results");
     }
 
     private static void VerifyAppearance(MainWindow app)
