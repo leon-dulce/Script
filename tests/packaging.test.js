@@ -15,3 +15,9 @@ test('Windows executable embeds an administrator manifest without uiAccess', () 
   assert.match(manifest, /<trustInfo xmlns="urn:schemas-microsoft-com:asm\.v3">/);
   assert.match(manifest, /<dpiAwareness[^>]*>PerMonitorV2<\/dpiAwareness>/);
 });
+
+test('repository does not include the unused IDE sample program', () => {
+  const root = path.join(__dirname, '..');
+  assert.equal(fs.existsSync(path.join(root, 'main.py')), false);
+  assert.equal(fs.existsSync(path.join(root, 'FlowKey.Desktop/FlowKey.Desktop.csproj')), true);
+});
