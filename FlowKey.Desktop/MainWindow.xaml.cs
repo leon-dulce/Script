@@ -12,7 +12,8 @@ namespace FlowKey.Desktop;
 
 public partial class MainWindow : Window
 {
-    private readonly ScriptStore _store = new(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FlowKey", "script.json"));
+    private readonly string _dataDirectory;
+    private readonly ScriptCatalog _catalog;
     private readonly DispatcherTimer _focusTimer = new() { Interval = TimeSpan.FromMilliseconds(100) };
     private readonly Native.HookCallback _keyboardCallback;
     private readonly Native.HookCallback _mouseCallback;
@@ -20,6 +21,7 @@ public partial class MainWindow : Window
     private readonly StepRecorder _recorder = new();
     private readonly SessionState _session = new();
     private ScriptDocument _script = new();
+    private IReadOnlyList<ScriptDocument> _savedScripts = [];
     private WindowInfo? _target;
     private nint _handle, _keyboardHook, _mouseHook;
     private int _hotkeyCode = 121;
@@ -27,12 +29,15 @@ public partial class MainWindow : Window
     private string _mode => _session.Mode;
     private string _message = "请选择目标窗口。";
     private int _currentStep = -1;
+    private long _currentIteration;
     private CancellationTokenSource? _playback;
     private bool _pageReady;
-    private bool _pendingRecord;
+    private bool _pendingRecord, _pendingRun, _waitingForNextRun, _dirty;
 
-    public MainWindow()
+    public MainWindow(string? dataDirectory = null)
     {
+        _dataDirectory = dataDirectory ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FlowKey");
+        _catalog = new ScriptCatalog(Path.Combine(_dataDirectory, "scripts"));
         InitializeComponent();
         _keyboardCallback = OnKeyboard;
         _mouseCallback = OnMouse;
@@ -48,17 +53,20 @@ public partial class MainWindow : Window
         HwndSource.FromHwnd(_handle).AddHook(OnWindowMessage);
         try
         {
-            _script = _store.Load() ?? new ScriptDocument();
-            _message = _script.Steps.Count > 0 ? "已载入本地脚本，请重新选择目标窗口。" : "请选择目标窗口开始录制。";
+            var migrated = _catalog.MigrateLegacy(Path.Combine(_dataDirectory, "script.json"));
+            RefreshCatalog();
+            _script = migrated ?? _savedScripts.FirstOrDefault() ?? new ScriptDocument();
+            if (!_message.StartsWith("有 ", StringComparison.Ordinal))
+                _message = _savedScripts.Count > 0 ? "已载入脚本，请选择目标窗口。" : "请选择目标窗口开始录制。";
         }
-        catch (InvalidDataException error) { _message = error.Message; }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException)
+        { _message = $"载入脚本库失败：{error.Message}"; }
         RegisterShortcut(_script.Hotkey);
         RefreshWindows();
         try
         {
-            var appData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FlowKey");
-            var assetDirectory = WebAssets.ExtractTo(Path.Combine(appData, "assets"));
-            var webViewEnvironment = await CoreWebView2Environment.CreateAsync(userDataFolder: Path.Combine(appData, "WebView2"));
+            var assetDirectory = WebAssets.ExtractTo(Path.Combine(_dataDirectory, "assets"));
+            var webViewEnvironment = await CoreWebView2Environment.CreateAsync(userDataFolder: Path.Combine(_dataDirectory, "WebView2"));
             await Browser.EnsureCoreWebView2Async(webViewEnvironment);
             Browser.CoreWebView2.SetVirtualHostNameToFolderMapping("flowkey.local", assetDirectory, CoreWebView2HostResourceAccessKind.DenyCors);
             Browser.CoreWebView2.Settings.AreDevToolsEnabled = false;
@@ -101,6 +109,12 @@ public partial class MainWindow : Window
             {
                 if (_target is { } waitingTarget && IsTargetReady(waitingTarget)) StartRecording(waitingTarget);
                 else { _pendingRecord = false; _message = "已取消等待录制。"; Publish(); }
+                return 0;
+            }
+            if (_pendingRun)
+            {
+                if (_target is { } waitingTarget && IsTargetReady(waitingTarget)) { _pendingRun = false; StartRun(); }
+                else { _pendingRun = false; _message = "已取消等待执行。"; Publish(); }
                 return 0;
             }
             switch (_session.ResolveShortcut(_target is not null, _script.Steps.Count > 0))
@@ -149,6 +163,7 @@ public partial class MainWindow : Window
             if (_mode == "running") StopRun("目标窗口已关闭，已停止执行。");
             _target = null;
             _pendingRecord = false;
+            _pendingRun = false;
         }
         Publish();
     }
@@ -159,8 +174,11 @@ public partial class MainWindow : Window
         var state = new
         {
             mode = _mode, message = _message, currentStep = _currentStep,
+            currentIteration = _currentIteration, waitingForNextRun = _waitingForNextRun,
+            pendingRun = _pendingRun, dirty = _dirty,
             selectedId = _target?.Handle.ToString() ?? "",
             windows = _windows.Select(w => new { id = w.Handle.ToString(), title = w.Title, process = w.ProcessName }),
+            savedScripts = _savedScripts.Select(s => new { id = s.Id, name = s.Name, stepCount = s.Steps.Count, mode = s.Execution.Mode.ToString() }),
             script = _script
         };
         Browser.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(state, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
@@ -177,18 +195,23 @@ public partial class MainWindow : Window
             switch (action)
             {
                 case "refresh": RefreshWindows(); break;
+                case "newScript": NewScript(); break;
+                case "openScript": OpenScript(root.GetProperty("id").GetString()); break;
+                case "deleteScript": DeleteScript(root.GetProperty("id").GetString()); break;
                 case "select": SelectWindow(root.GetProperty("value").GetString()); break;
                 case "hotkey":
-                    if (_mode == "ready" && root.TryGetProperty("value", out var key) && ScriptValidator.Hotkeys.Contains(key.GetString())) RegisterShortcut(key.GetString()!);
+                    if (_mode == "ready" && root.TryGetProperty("value", out var key) && ScriptValidator.Hotkeys.Contains(key.GetString()))
+                        if (RegisterShortcut(key.GetString()!)) _dirty = true;
                     break;
                 case "name": if (_mode == "ready") SetName(root); break;
+                case "execution": if (_mode == "ready") SetExecution(root); break;
                 case "record": ToggleRecording(); break;
                 case "pause": PauseRecording("录制已暂停，返回目标窗口后可继续。"); break;
                 case "finish": FinishRecording(); break;
-                case "run": if (_mode == "running") StopRun("已停止执行。"); else StartRun(); break;
+                case "run": RequestRun(); break;
                 case "save": SaveScript(); break;
                 case "load": LoadScript(); break;
-                case "delete": if (_mode == "ready") _script.Steps.RemoveAt(root.GetProperty("index").GetInt32()); break;
+                case "delete": if (_mode == "ready") { _script.Steps.RemoveAt(root.GetProperty("index").GetInt32()); _dirty = true; } break;
                 case "delay": if (_mode == "ready") SetDelay(root); break;
                 case "text": if (_mode == "ready") SetText(root); break;
             }
@@ -206,11 +229,61 @@ public partial class MainWindow : Window
         _message = _target is null ? "所选窗口不可用，请刷新列表后重选。" : $"已确认目标窗口：{_target.Value.Title}。";
     }
 
+    private void RefreshCatalog()
+    {
+        var result = _catalog.List();
+        _savedScripts = result.Scripts;
+        if (result.Errors.Count > 0) _message = $"有 {result.Errors.Count} 个脚本文件无法载入，请检查本地脚本目录。";
+    }
+
+    private void NewScript()
+    {
+        if (_mode != "ready") return;
+        _script = new ScriptDocument { Name = "未命名脚本", Hotkey = _registeredHotkey ?? "F10" };
+        _target = null;
+        _pendingRecord = _pendingRun = false;
+        _dirty = true;
+        _message = "已建立新脚本，请选择目标窗口。";
+    }
+
+    private void OpenScript(string? id)
+    {
+        if (_mode != "ready" || id is null) return;
+        try
+        {
+            var script = _catalog.Load(id);
+            if (script is null) { _message = "找不到此脚本，请刷新脚本库。"; return; }
+            _script = script;
+            _target = null;
+            _pendingRecord = _pendingRun = false;
+            _dirty = false;
+            if (RegisterShortcut(script.Hotkey)) _message = $"已载入「{script.Name}」，请重新选择目标窗口。";
+            else _dirty = true;
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException)
+        { _message = $"载入失败：{error.Message}"; }
+    }
+
+    private void DeleteScript(string? id)
+    {
+        if (_mode != "ready" || id is null) return;
+        try
+        {
+            if (!_catalog.Delete(id)) { _message = "脚本已不存在。"; return; }
+            if (_script.Id == id) NewScript();
+            RefreshCatalog();
+            _message = "脚本已从本机删除。";
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException)
+        { _message = $"删除失败：{error.Message}"; }
+    }
+
     private void SetDelay(JsonElement root)
     {
         var value = root.GetProperty("value").GetInt32();
         if (value is < 0 or > 60000) throw new InvalidOperationException();
         _script.Steps[root.GetProperty("index").GetInt32()].DelayMs = value;
+        _dirty = true;
     }
 
     private void SetName(JsonElement root)
@@ -218,6 +291,20 @@ public partial class MainWindow : Window
         var name = root.GetProperty("value").GetString()?.Trim() ?? "";
         if (name.Length is < 1 or > 100) throw new InvalidOperationException();
         _script.Name = name;
+        _dirty = true;
+    }
+
+    private void SetExecution(JsonElement root)
+    {
+        var modeName = root.GetProperty("mode").GetString();
+        if (!Enum.TryParse<ExecutionMode>(modeName, out var mode) || !Enum.IsDefined(mode))
+            throw new InvalidOperationException();
+        var count = root.GetProperty("count").GetInt32();
+        var interval = root.GetProperty("intervalMs").GetInt32();
+        if (count is < 1 or > 10000 || interval is < 100 or > 60000) throw new InvalidOperationException();
+        _script.Execution = new ExecutionPlan { Mode = mode, RepeatCount = count, IntervalMs = interval };
+        _dirty = true;
+        _message = "执行设置已更新，请保存脚本。";
     }
 
     private void SetText(JsonElement root)
@@ -227,6 +314,7 @@ public partial class MainWindow : Window
         var index = root.TryGetProperty("index", out var element) ? element.GetInt32() : -1;
         if (index < 0) _script.Steps.Add(new ScriptStep { Type = StepType.Text, Text = text, DelayMs = 500 });
         else if (_script.Steps[index].Type == StepType.Text) _script.Steps[index].Text = text;
+        _dirty = true;
     }
 
     private void ToggleRecording()
@@ -256,6 +344,7 @@ public partial class MainWindow : Window
             _script.TargetProcessPath = target.ProcessPath;
             _script.ClientWidth = target.Width;
             _script.ClientHeight = target.Height;
+            _dirty = true;
         }
         _recorder.Reset();
         var module = Native.GetModuleHandle(null);
@@ -338,6 +427,7 @@ public partial class MainWindow : Window
         if (step.Type is StepType.Click or StepType.Scroll &&
             (step.X < 0 || step.Y < 0 || step.X >= target.Width || step.Y >= target.Height)) return;
         _recorder.Add(_script.Steps, step, tick);
+        _dirty = true;
         Publish();
     }
 
@@ -347,8 +437,40 @@ public partial class MainWindow : Window
     {
         if (_target is not { } target) return;
         if (_pendingRecord && IsTargetReady(target)) StartRecording(target);
+        if (_pendingRun)
+        {
+            if (!Native.Matches(target) || !Native.SameSize(target))
+            { _pendingRun = false; _message = "目标窗口已关闭或尺寸变化，取消等待执行。"; Publish(); }
+            else if (IsTargetReady(target)) { _pendingRun = false; StartRun(); }
+        }
         if (_mode == "recording" && !IsTargetReady(target)) PauseRecording("目标窗口失焦、关闭或尺寸变化，录制已暂停。");
         if (_mode == "running" && !IsTargetReady(target)) StopRun("目标窗口失焦、关闭或尺寸变化，已停止执行。");
+    }
+
+    private void RequestRun()
+    {
+        if (_mode == "running") { StopRun("已停止执行。"); return; }
+        if (_mode != "ready") return;
+        if (_pendingRun) { _pendingRun = false; _message = "已取消等待执行。"; Publish(); return; }
+        if (_target is not { } target) { _message = "请先选择目标窗口。"; Publish(); return; }
+        if (_script.Steps.Count == 0) { _message = "脚本尚无步骤。"; Publish(); return; }
+        var problem = RunPreflight(target);
+        if (problem is not null) { _message = problem; Publish(); return; }
+        _pendingRecord = false;
+        if (Native.GetForegroundWindow() != target.Handle)
+        { _pendingRun = true; _message = "已准备执行，请切回目标窗口；再次点击可取消。"; Publish(); return; }
+        StartRun();
+    }
+
+    private string? RunPreflight(WindowInfo target)
+    {
+        if (!Native.Matches(target) || !Native.SameSize(target)) return "目标窗口已关闭或尺寸变化。";
+        if (_script.ClientWidth != target.Width || _script.ClientHeight != target.Height ||
+            (_script.TargetProcessPath.Length > 0 && !string.Equals(_script.TargetProcessPath, target.ProcessPath, StringComparison.OrdinalIgnoreCase)))
+            return "目标程序或窗口尺寸与脚本不符。";
+        try { ScriptValidator.Validate(_script); }
+        catch (InvalidDataException error) { return error.Message; }
+        return null;
     }
 
     private void StartRun()
@@ -356,14 +478,12 @@ public partial class MainWindow : Window
         if (_mode != "ready" || _playback is not null) return;
         if (_target is not { } target) { _message = "请先选择目标窗口。"; Publish(); return; }
         if (_script.Steps.Count == 0) { _message = "脚本尚无步骤；按快捷键可开始录制。"; Publish(); return; }
-        if (!IsTargetReady(target)) { _message = "目标窗口必须位于前台，且尺寸与录制时一致。"; Publish(); return; }
-        if (_script.ClientWidth != target.Width || _script.ClientHeight != target.Height ||
-            (_script.TargetProcessPath.Length > 0 && !string.Equals(_script.TargetProcessPath, target.ProcessPath, StringComparison.OrdinalIgnoreCase)))
-        { _message = "目标程序或窗口尺寸与脚本不符。"; Publish(); return; }
-        try { ScriptValidator.Validate(_script); }
-        catch (InvalidDataException error) { _message = error.Message; Publish(); return; }
+        var problem = RunPreflight(target);
+        if (problem is not null) { _message = problem; Publish(); return; }
+        if (Native.GetForegroundWindow() != target.Handle) { _message = "目标窗口必须位于前台。"; Publish(); return; }
         _playback = new CancellationTokenSource();
-        _session.BeginRun(); _currentStep = -1; _message = "正在执行；再按快捷键可停止。";
+        _session.BeginRun(); _currentStep = -1; _currentIteration = 0; _waitingForNextRun = false;
+        _message = "正在执行；再按快捷键可停止。";
         Publish();
         _ = RunStepsAsync(target, _playback);
     }
@@ -372,17 +492,32 @@ public partial class MainWindow : Window
     {
         try
         {
-            for (var index = 0; index < _script.Steps.Count; index++)
-            {
-                await Task.Yield();
-                run.Token.ThrowIfCancellationRequested();
-                _currentStep = index; Publish();
-                await Task.Delay(_script.Steps[index].DelayMs, run.Token);
-                run.Token.ThrowIfCancellationRequested();
-                if (!IsTargetReady(target)) { StopRun("目标窗口发生变化，已停止执行。"); return; }
-                await ExecuteStepAsync(target, _script.Steps[index], run.Token);
-            }
-            StopRun("脚本执行完成。", run);
+            await PlaybackLoop.RunAsync(_script.Execution, _script.Steps,
+                async (iteration, index, step, cancellation) =>
+                {
+                    await Task.Yield();
+                    cancellation.ThrowIfCancellationRequested();
+                    _currentIteration = iteration;
+                    _currentStep = index;
+                    _waitingForNextRun = false;
+                    Publish();
+                    await Task.Delay(step.DelayMs, cancellation);
+                    cancellation.ThrowIfCancellationRequested();
+                    if (!IsTargetReady(target))
+                    { StopRun("目标窗口发生变化，已停止执行。"); cancellation.ThrowIfCancellationRequested(); }
+                    await ExecuteStepAsync(target, step, cancellation);
+                },
+                async (interval, cancellation) =>
+                {
+                    _currentStep = -1;
+                    _waitingForNextRun = true;
+                    Publish();
+                    await Task.Delay(interval, cancellation);
+                    cancellation.ThrowIfCancellationRequested();
+                    if (!IsTargetReady(target))
+                    { StopRun("目标窗口发生变化，已停止执行。"); cancellation.ThrowIfCancellationRequested(); }
+                }, run.Token);
+            StopRun($"脚本执行完成，共 {_currentIteration} 轮。", run);
         }
         catch (OperationCanceledException) { /* StopRun already updated the UI. */ }
         catch (Exception error) { StopRun($"执行失败：{error.Message}", run); }
@@ -429,26 +564,26 @@ public partial class MainWindow : Window
     {
         if (_mode != "running" || (expected is not null && !ReferenceEquals(_playback, expected))) return;
         _playback?.Cancel();
-        _session.StopRun(); _currentStep = -1; _message = message;
+        _session.StopRun(); _currentStep = -1; _waitingForNextRun = false; _message = message;
         Publish();
     }
 
     private void SaveScript()
     {
         if (_mode != "ready") return;
-        try { _store.Save(_script); _message = $"脚本已保存到 {_store.FilePath}"; }
+        try
+        {
+            _catalog.Save(_script);
+            RefreshCatalog();
+            _dirty = false;
+            _message = $"已保存「{_script.Name}」到脚本库。";
+        }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException) { _message = $"保存失败：{error.Message}"; }
     }
 
     private void LoadScript()
     {
         if (_mode != "ready") return;
-        try
-        {
-            _script = _store.Load() ?? new ScriptDocument();
-            RegisterShortcut(_script.Hotkey);
-            _message = "已重新载入脚本，请确认目标窗口。";
-        }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException) { _message = $"载入失败：{error.Message}"; }
+        OpenScript(_script.Id);
     }
 }

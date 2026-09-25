@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.IO;
 using FlowKey.Desktop;
 
 if (Marshal.SizeOf<Native.Input>() != 40) throw new Exception("SendInput layout must be 40 bytes on x64.");
@@ -35,6 +36,8 @@ if (normalKey is null || normalKey.Keys.Count != 1 || normalKey.Keys[0] != 0x41 
     KeyboardStepFactory.Create(0x41, Native.InjectedKeyboard, false, false, false, false) is not null)
     throw new Exception("Keyboard recording conversion failed.");
 Console.WriteLine("PASS physical keys and combinations become recordable steps");
+
+DesktopE2E.Run();
 
 var assetsRoot = Path.Combine(Path.GetTempPath(), "FlowKey-assets-test-" + Guid.NewGuid().ToString("N"));
 try

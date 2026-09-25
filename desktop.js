@@ -7,6 +7,104 @@
   const icons = { Click: '↖', DoubleClick: '↖', Scroll: '↕', Key: '↵', Text: '⌨' };
   let state = null;
   let lastMessage = '';
+  let view = 'editor';
+
+  function executionLabel(plan) {
+    if (plan.mode === 'Count') return `执行 ${plan.repeatCount} 次 · 每轮间隔 ${plan.intervalMs} 毫秒`;
+    if (plan.mode === 'Continuous') return `持续执行 · 每轮间隔 ${plan.intervalMs} 毫秒`;
+    return '只执行一次';
+  }
+
+  function showView(next) {
+    view = next;
+    $('workspace-view').hidden = next !== 'editor';
+    $('execution-view').hidden = next !== 'execution';
+    for (const [name, id] of [['editor', 'nav-editor'], ['execution', 'nav-execution']]) {
+      const button = $(id);
+      button.classList.toggle('active', name === next);
+      if (name === next) button.setAttribute('aria-current', 'page');
+      else button.removeAttribute('aria-current');
+    }
+  }
+
+  function confirmDiscard() {
+    return !state?.dirty || window.confirm('当前脚本有尚未保存的修改，确定要离开吗？');
+  }
+
+  function renderLibrary() {
+    const library = $('saved-scripts');
+    library.replaceChildren();
+    if (!state.savedScripts.length) {
+      const empty = document.createElement('div');
+      empty.className = 'library-empty';
+      empty.textContent = '尚无已保存脚本。录制完成后点击保存。';
+      library.append(empty);
+    }
+    state.savedScripts.forEach(script => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = `saved-script${script.id === state.script.id ? ' active' : ''}`;
+      button.disabled = state.mode !== 'ready';
+      const title = document.createElement('strong');
+      title.textContent = script.name;
+      const detail = document.createElement('small');
+      detail.textContent = `${script.stepCount} 个步骤 · ${script.mode === 'Continuous' ? '持续' : script.mode === 'Count' ? '指定次数' : '单次'}`;
+      button.append(title, detail);
+      button.addEventListener('click', () => {
+        if (script.id !== state.script.id && confirmDiscard()) send('openScript', { id: script.id });
+      });
+      library.append(button);
+    });
+    $('new-script').disabled = state.mode !== 'ready';
+    $('delete-script').disabled = state.mode !== 'ready' || !state.savedScripts.some(script => script.id === state.script.id);
+  }
+
+  function renderExecution(selected) {
+    const plan = state.script.execution || { mode: 'Once', repeatCount: 1, intervalMs: 1000 };
+    $('plan-summary').textContent = executionLabel(plan);
+    $('execution-script-name').textContent = state.script.name + (state.dirty ? ' · 未保存' : '');
+    $('execution-target').textContent = selected ? `${selected.process} · ${selected.title}` : '请先在录制与编辑页面选择目标窗口';
+    for (const mode of ['Once', 'Count', 'Continuous']) $(`mode-${mode.toLowerCase()}`).checked = plan.mode === mode;
+    $('repeat-count').value = String(plan.repeatCount);
+    $('repeat-count').disabled = plan.mode !== 'Count' || state.mode !== 'ready';
+    $('repeat-interval').value = String(plan.intervalMs);
+    $('repeat-interval').disabled = plan.mode === 'Once' || state.mode !== 'ready';
+    $('execution-description').textContent = plan.mode === 'Once'
+      ? '脚本将从第一步到最后一步执行一次。'
+      : plan.mode === 'Count'
+        ? `脚本将执行 ${plan.repeatCount} 轮；每轮完成后等待 ${plan.intervalMs} 毫秒，再开始下一轮。`
+        : `脚本将持续循环；每轮完成后等待 ${plan.intervalMs} 毫秒。再次按 ${state.script.hotkey} 可停止。`;
+    $('execution-hotkey').value = state.script.hotkey;
+    $('execution-hotkey').disabled = state.mode !== 'ready';
+    $('save-execution').disabled = state.mode !== 'ready';
+    const active = state.mode === 'running' || state.pendingRun;
+    $('execution-start').disabled = !active && (state.mode !== 'ready' || !selected || !state.script.steps.length);
+    $('execution-start').textContent = active ? '■ 停止执行' : '▶ 开始执行';
+    $('execution-start').className = `button ${active ? 'danger' : 'primary'}`;
+    $('execution-help').textContent = state.pendingRun
+      ? '已准备执行，切回目标窗口后开始；再次点击可取消。'
+      : state.mode === 'running' ? `再按 ${state.script.hotkey} 可停止执行。`
+        : `切回目标窗口按 ${state.script.hotkey} 执行当前脚本；再次按下停止。`;
+    $('cycle-number').textContent = state.mode === 'running'
+      ? `${state.currentIteration}${plan.mode === 'Count' ? ` / ${plan.repeatCount}` : ''}${state.waitingForNextRun ? ' · 等待下一轮' : ''}`
+      : '—';
+    $('execution-progress-label').textContent = state.waitingForNextRun ? '等待下一轮' : state.mode === 'running' ? '执行中' : state.pendingRun ? '等待目标窗口' : '准备就绪';
+    const current = state.mode === 'running' && !state.waitingForNextRun ? state.currentStep + 1 : 0;
+    $('execution-progress-fraction').textContent = `${current} / ${state.script.steps.length}`;
+    $('execution-progress-fill').style.width = state.script.steps.length ? `${current * 100 / state.script.steps.length}%` : '0%';
+  }
+
+  function submitExecution() {
+    const mode = ['Once', 'Count', 'Continuous'].find(value => $(`mode-${value.toLowerCase()}`).checked);
+    const count = Number($('repeat-count').value);
+    const intervalMs = Number($('repeat-interval').value);
+    if (!mode || !Number.isInteger(count) || count < 1 || count > 10000 ||
+        !Number.isInteger(intervalMs) || intervalMs < 100 || intervalMs > 60000) {
+      window.alert('执行次数须为 1–10000，轮次间隔须为 100–60000 毫秒。');
+      return;
+    }
+    send('execution', { mode, count, intervalMs });
+  }
 
   function stepLabel(step) {
     switch (step.type) {
@@ -116,17 +214,22 @@
     $('load-button').disabled = state.mode !== 'ready';
     $('add-text').disabled = state.mode !== 'ready';
     $('run-button').disabled = state.mode !== 'running' && (!selected || !state.script.steps.length || state.mode !== 'ready');
-    $('run-button').textContent = state.mode === 'running' ? '■ 停止执行' : '▶ 执行脚本';
-    $('run-button').className = `button ${state.mode === 'running' ? 'danger' : 'primary'}`;
-    $('progress-label').textContent = state.mode === 'running' ? '执行中' : '准备就绪';
-    $('progress-fraction').textContent = `${state.mode === 'running' ? state.currentStep + 1 : 0} / ${state.script.steps.length}`;
-    $('progress-fill').style.width = state.script.steps.length && state.mode === 'running' ? `${(state.currentStep + 1) * 100 / state.script.steps.length}%` : '0%';
+    const active = state.mode === 'running' || state.pendingRun;
+    $('run-button').disabled = !active && (!selected || !state.script.steps.length || state.mode !== 'ready');
+    $('run-button').textContent = active ? '■ 停止执行' : '▶ 执行脚本';
+    $('run-button').className = `button ${active ? 'danger' : 'primary'}`;
+    $('progress-label').textContent = state.waitingForNextRun ? '等待下一轮' : state.mode === 'running' ? '执行中' : state.pendingRun ? '等待目标窗口' : '准备就绪';
+    const current = state.mode === 'running' && !state.waitingForNextRun ? state.currentStep + 1 : 0;
+    $('progress-fraction').textContent = `${current} / ${state.script.steps.length}`;
+    $('progress-fill').style.width = state.script.steps.length ? `${current * 100 / state.script.steps.length}%` : '0%';
     document.querySelector('.help').textContent = state.mode === 'recording'
       ? `按 ${state.script.hotkey} 结束录制。`
       : state.script.steps.length === 0
         ? `确认目标窗口后，切回该窗口按 ${state.script.hotkey} 开始录制；再次按下结束。`
         : `切回目标窗口按 ${state.script.hotkey} 执行脚本；再次按下停止。`;
     renderSteps();
+    renderLibrary();
+    renderExecution(selected);
     if (state.message !== lastMessage) {
       lastMessage = state.message;
       const toast = $('toast');
@@ -142,7 +245,9 @@
     $('refresh-windows').hidden = false;
     $('window-select').style.maxWidth = '240px';
     document.querySelector('.window-meta small').textContent = '请选择当前可见窗口';
-    document.querySelectorAll('.nav button:not(.active)').forEach(button => { button.hidden = true; });
+    $('sidebar-library').hidden = false;
+    $('plan-summary').hidden = false;
+    $('open-execution').hidden = false;
     $('add-text').hidden = false;
     $('script-name-row').hidden = false;
     $('add-step').hidden = true;
@@ -156,6 +261,18 @@
     $('refresh-windows').addEventListener('click', () => send('refresh'));
     $('window-select').addEventListener('change', event => send('select', { value: event.target.value }));
     $('hotkey-select').addEventListener('change', event => send('hotkey', { value: event.target.value }));
+    $('execution-hotkey').addEventListener('change', event => send('hotkey', { value: event.target.value }));
+    $('nav-editor').addEventListener('click', () => showView('editor'));
+    $('nav-execution').addEventListener('click', () => showView('execution'));
+    $('open-execution').addEventListener('click', () => showView('execution'));
+    $('new-script').addEventListener('click', () => { if (confirmDiscard()) { send('newScript'); showView('editor'); } });
+    $('delete-script').addEventListener('click', () => {
+      if (state && window.confirm(`确定删除「${state.script.name}」吗？此操作无法恢复。`)) send('deleteScript', { id: state.script.id });
+    });
+    for (const id of ['mode-once', 'mode-count', 'mode-continuous', 'repeat-count', 'repeat-interval'])
+      $(id).addEventListener('change', submitExecution);
+    $('save-execution').addEventListener('click', () => send('save'));
+    $('execution-start').addEventListener('click', () => send('run'));
     $('script-name').addEventListener('change', event => send('name', { value: event.target.value }));
     $('record-button').addEventListener('click', () => send('record'));
     $('pause-button').addEventListener('click', () => send('pause'));
