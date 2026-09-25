@@ -197,7 +197,7 @@
     if (!steps.length) {
       const empty = document.createElement('div');
       empty.className = 'empty';
-      empty.textContent = editable ? '先设置窗口名称和快捷键，再到指定窗口按快捷键。每次按下、松开按键与间隔都会即时显示。' : '从左侧选择一个已保存脚本，查看完整执行步骤。';
+      empty.textContent = editable ? '按快捷键或「开始录制」后，可切换到其他窗口。每次按下、松开按键与间隔都会即时显示。' : '从左侧选择一个已保存脚本，查看完整执行步骤。';
       container.appendChild(empty);
     }
     steps.forEach((step, index) => {
@@ -343,6 +343,11 @@
     $('nav-execution').disabled = isBusy();
     $('status-text').textContent = state.namingRequired ? '录制结束，等待命名保存' : ({ ready: '就绪，等待操作', recording: '正在录制', paused: '录制已暂停', running: '正在执行脚本' })[state.mode] || '错误';
     $('status-hint').textContent = state.message;
+    $('restart-admin').hidden = !!state.elevated;
+    $('restart-admin').disabled = isBusy();
+    $('recording-access-warning').textContent = state.recordingAccessWarning || '';
+    $('recording-access-warning').hidden = !state.recordingAccessWarning;
+    $('recording-access-warning').style.color = '#ffcf8a';
     $('status-dot').className = `pulse${state.mode === 'recording' ? ' recording' : state.mode === 'running' ? ' running' : ''}`;
     $('add-text').disabled = true;
     $('record-button').disabled = state.namingRequired || state.workspace !== 'editor' || state.mode === 'running';
@@ -389,6 +394,7 @@
     $('execution-window-select').addEventListener('change', event => send('select', { value: event.target.value }));
     $('hotkey-select').addEventListener('change', event => send('hotkey', { value: event.target.value }));
     $('record-button').addEventListener('click', () => send('record'));
+    $('restart-admin').addEventListener('click', () => { if (!isBusy()) send('restartAdmin'); });
     $('execution-hotkey').addEventListener('change', event => send('hotkey', { value: event.target.value }));
     $('nav-editor').addEventListener('click', () => navigate('editor'));
     $('nav-execution').addEventListener('click', () => navigate('execution'));

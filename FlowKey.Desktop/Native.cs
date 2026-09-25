@@ -9,10 +9,12 @@ internal readonly record struct WindowInfo(nint Handle, int ProcessId, string Ti
 
 internal static class Native
 {
+    internal static readonly nint ReplayInputTag = unchecked((nint)0x464C4F574B4559L);
     internal const int KeyboardHook = 13, MouseHook = 14, HotkeyMessage = 0x0312;
     internal const int KeyDown = 0x0100, KeyUp = 0x0101, SysKeyDown = 0x0104, SysKeyUp = 0x0105;
     internal const int LeftDown = 0x0201, RightDown = 0x0204, MiddleDown = 0x0207, Wheel = 0x020A;
     internal const uint InjectedKeyboard = 0x10, InjectedMouse = 0x01;
+
 
     [StructLayout(LayoutKind.Sequential)] internal struct Point { public int X, Y; }
     [StructLayout(LayoutKind.Sequential)] internal struct Rect { public int Left, Top, Right, Bottom; public int Width => Right - Left; public int Height => Bottom - Top; }
@@ -101,6 +103,7 @@ internal static class Native
             Type = 1,
             Key = new KeyInput
             {
+                ExtraInfo = ReplayInputTag,
                 VirtualKey = unicode ? (ushort)0 : key,
                 Scan = unicode ? key : (ushort)0,
                 Flags = (ushort)((extended ? 1 : 0) | (release ? 2 : 0) | (unicode ? 4 : 0))

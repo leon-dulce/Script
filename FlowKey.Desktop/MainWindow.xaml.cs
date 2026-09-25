@@ -16,7 +16,7 @@ public partial class MainWindow : Window
     private readonly string _dataDirectory;
     private readonly ScriptCatalog _catalog;
     private readonly DispatcherTimer _focusTimer = new() { Interval = TimeSpan.FromMilliseconds(100) };
-    private readonly Native.HookCallback _keyboardCallback;
+    private KeyboardCapture? _keyboardCapture;
     private readonly List<WindowInfo> _windows = [];
     private readonly StepRecorder _recorder = new();
     private readonly Queue<(ScriptStep Step, long Tick)> _recordedInputs = new();
@@ -26,11 +26,11 @@ public partial class MainWindow : Window
     private ScriptDocument? _executionScript;
     private string _workspace = "editor";
     private string _recordingHotkey = "F10";
-    private bool _namingRequired, _inputDrainScheduled;
+    private bool _namingRequired;
     private string _namingError = "";
     private IReadOnlyList<ScriptDocument> _savedScripts = [];
     private WindowInfo? _target;
-    private nint _handle, _keyboardHook;
+    private nint _handle;
     private int _hotkeyCode = 121;
     private string? _registeredHotkey;
     private string _mode => _session.Mode;
@@ -39,6 +39,9 @@ public partial class MainWindow : Window
     private long _currentIteration;
     private CancellationTokenSource? _playback;
     private KeyboardPlayback? _playbackKeyboard;
+    private readonly bool _elevated = ProcessAccess.IsElevated(Environment.ProcessId) == true;
+    private string _recordingAccessWarning = "";
+    private nint _accessForeground;
     private bool _pageReady;
     private bool _pendingRecord, _pendingRun, _waitingForNextRun, _dirty;
 
@@ -50,7 +53,6 @@ public partial class MainWindow : Window
         _dataDirectory = dataDirectory ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FlowKey");
         _catalog = new ScriptCatalog(Path.Combine(_dataDirectory, "scripts"));
         InitializeComponent();
-        _keyboardCallback = OnKeyboard;
         Loaded += OnLoaded;
         Closing += OnClosing;
         Closed += OnClosed;
@@ -68,6 +70,10 @@ public partial class MainWindow : Window
             RefreshCatalog();
             _executionScript = migrated ?? _savedScripts.FirstOrDefault();
             _recordingHotkey = _executionScript?.Hotkey ?? "F10";
+            var launchArguments = Environment.GetCommandLineArgs();
+            var hotkeyArgument = Array.IndexOf(launchArguments, "--recording-hotkey");
+            if (hotkeyArgument >= 0 && hotkeyArgument + 1 < launchArguments.Length && ScriptValidator.Hotkeys.Contains(launchArguments[hotkeyArgument + 1]))
+                _recordingHotkey = launchArguments[hotkeyArgument + 1];
             _script.Hotkey = _recordingHotkey;
             if (!_message.StartsWith("有 ", StringComparison.Ordinal))
                 _message = $"按 {_recordingHotkey} 或点击「开始录制」开始；再次按下结束并命名保存。";
@@ -210,6 +216,7 @@ public partial class MainWindow : Window
             currentIteration = _currentIteration, waitingForNextRun = _waitingForNextRun,
             pendingRecord = _pendingRecord, pendingRun = _pendingRun, dirty = _dirty,
             namingRequired = _namingRequired, namingError = _namingError,
+            elevated = _elevated, recordingAccessWarning = _recordingAccessWarning,
             selectedId = _target?.Handle.ToString() ?? "",
             windows = _windows.Select(w => new { id = w.Handle.ToString(), title = w.Title, process = w.ProcessName }),
             savedScripts = _savedScripts.Select(s => new { id = s.Id, name = s.Name, stepCount = s.Steps.Count, mode = s.Execution.Mode.ToString() }),
@@ -261,6 +268,7 @@ public partial class MainWindow : Window
                     break;
                 case "name": if (_mode == "ready" && _workspace == "editor") { SetName(root); AutoSaveEdits(); } break;
                 case "execution": if (_mode == "ready") SetExecution(root); break;
+                case "restartAdmin": RestartAsAdministrator(); break;
                 case "record": ToggleRecording(); break;
                 case "pause": break;
                 case "finish": FinishRecording(); break;
@@ -413,6 +421,18 @@ public partial class MainWindow : Window
         _dirty = true;
     }
 
+    private void RestartAsAdministrator()
+    {
+        if (_elevated || _mode != "ready" || _namingRequired) return;
+        if (_dirty && (_script.Steps.Count > 0 || _savedScripts.Any(s => s.Id == _script.Id)))
+        {
+            AutoSaveEdits();
+            if (_dirty) return;
+        }
+        if (ProcessAccess.TryRestart(Environment.ProcessPath!, _recordingHotkey, out var error)) Close();
+        else _message = error;
+    }
+
     private void ToggleRecording()
     {
         if (_workspace != "editor" || _namingRequired) return;
@@ -441,15 +461,12 @@ public partial class MainWindow : Window
             _dirty = true;
         }
         _target = null;
+        _accessForeground = 0;
+        _recordingAccessWarning = "";
         _recordedInputs.Clear();
-        _inputDrainScheduled = false;
-        var module = Native.GetModuleHandle(null);
-        _keyboardHook = Native.SetWindowsHookEx(Native.KeyboardHook, _keyboardCallback, module, 0);
-        if (_keyboardHook == 0)
-        {
-            StopHooks(); _session.FinishRecording(); _message = "无法启用输入监听。"; return;
-        }
-        _recorder.Reset(Stopwatch.GetTimestamp());
+        try { _keyboardCapture = new KeyboardCapture(_hotkeyCode); }
+        catch (InvalidOperationException error) { _message = error.Message; Publish(); return; }
+        _recorder.Reset(_keyboardCapture.StartedAt);
         _session.BeginRecording();
         _message = $"正在录制每个按键与间隔；再按 {_recordingHotkey} 停止并命名保存。";
         Publish();
@@ -458,8 +475,9 @@ public partial class MainWindow : Window
     private void FinishRecording()
     {
         if (_mode is not ("recording" or "paused")) return;
+        StopHooks();
         DrainRecordedInputs();
-        StopHooks(); _pendingRecord = false; _session.FinishRecording();
+        _pendingRecord = false; _session.FinishRecording();
         if (_script.Steps.Count == 0)
         {
             _dirty = false;
@@ -513,24 +531,10 @@ public partial class MainWindow : Window
 
     private void StopHooks()
     {
-        if (_keyboardHook != 0) { Native.UnhookWindowsHookEx(_keyboardHook); _keyboardHook = 0; }
-    }
-
-    private nint OnKeyboard(int code, nint wParam, nint lParam)
-    {
-        if (code >= 0 && _mode == "recording" &&
-            wParam is Native.KeyDown or Native.SysKeyDown or Native.KeyUp or Native.SysKeyUp)
-        {
-            var data = Marshal.PtrToStructure<Native.KeyboardData>(lParam);
-            var step = KeyboardStepFactory.Create(data.VkCode, data.Flags,
-                wParam is Native.KeyUp or Native.SysKeyUp, _hotkeyCode);
-            if (step is not null)
-            {
-                var tick = Stopwatch.GetTimestamp();
-                QueueRecordedStep(step, tick);
-            }
-        }
-        return Native.CallNextHookEx(_keyboardHook, code, wParam, lParam);
+        if (_keyboardCapture is not { } capture) return;
+        capture.Dispose();
+        while (capture.TryDequeue(out var item)) _recordedInputs.Enqueue(item);
+        _keyboardCapture = null;
     }
 
     private void AddRecordedStep(ScriptStep step, long tick)
@@ -543,14 +547,13 @@ public partial class MainWindow : Window
     {
         if (_mode != "recording") return;
         _recordedInputs.Enqueue((step, tick));
-        if (_inputDrainScheduled) return;
-        _inputDrainScheduled = true;
-        Dispatcher.BeginInvoke(DrainRecordedInputs);
+
     }
 
     private void DrainRecordedInputs()
     {
-        _inputDrainScheduled = false;
+        if (_keyboardCapture is { } capture)
+            while (capture.TryDequeue(out var item)) _recordedInputs.Enqueue(item);
         if (_mode != "recording" || _recordedInputs.Count == 0) return;
         while (_recordedInputs.TryDequeue(out var captured))
             _recorder.Add(_script.Steps, captured.Step, captured.Tick);
@@ -562,6 +565,18 @@ public partial class MainWindow : Window
 
     private void CheckFocus()
     {
+        DrainRecordedInputs();
+        if (_mode == "recording")
+        {
+            var foreground = Native.GetForegroundWindow();
+            if (_accessForeground != foreground)
+            {
+                _accessForeground = foreground;
+                Native.GetWindowThreadProcessId(foreground, out var processId);
+                _recordingAccessWarning = ProcessAccess.RecordingWarning(_elevated, ProcessAccess.IsElevated((int)processId));
+                Publish();
+            }
+        }
         if (_pendingRun && _target is null) ConfirmForegroundTarget();
         if (_target is not { } target) return;
         if (_pendingRun)

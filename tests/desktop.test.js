@@ -106,6 +106,8 @@ test('global recording starts without a target and has no target or add-text con
   assert.equal(get('record-button').hidden, false);
   assert.equal(get('record-button').disabled, false);
   assert.match(select('.help').textContent, /切换窗口会继续记录/);
+  assert.match(descendants(get('steps')).map(e => e.textContent).join(' '), /可切换到其他窗口/);
+  assert.doesNotMatch(descendants(get('steps')).map(e => e.textContent).join(' '), /先设置窗口名称/);
   get('hotkey-select').change('F9');
   assert.equal(sent.at(-1).action, 'hotkey');
   get('record-button').click();
@@ -513,4 +515,25 @@ test('desktop markup has no manual save or new-script control in execution and i
   const executionMarkup = html.slice(html.indexOf('<div id="execution-view"'));
   assert.doesNotMatch(executionMarkup, /保存设置|未命名脚本|id="script-name"|id="add-text"/);
   assert.equal([...html.matchAll(/\bid="([^"]+)"/g)].length, ids.size, 'HTML IDs remain unique');
+});
+
+
+test('administrator restart preserves busy recordings and explains elevated foreground limits', () => {
+  const { get, sent, state, push } = desktop();
+  push(state({ elevated: false }));
+  assert.equal(get('restart-admin').hidden, false);
+  get('restart-admin').click();
+  assert.equal(sent.at(-1).action, 'restartAdmin');
+  for (const update of [{ mode: 'recording', recordingAccessWarning: '前台程序以管理员权限运行' }, { namingRequired: true }]) {
+    push(state(update));
+    const count = sent.length;
+    get('restart-admin').click();
+    assert.equal(sent.length, count);
+  }
+  push(state({ mode: 'recording', recordingAccessWarning: '前台程序以管理员权限运行' }));
+  assert.equal(get('recording-access-warning').hidden, false);
+  assert.match(get('recording-access-warning').textContent, /管理员/);
+  push(state({ elevated: true }));
+  assert.equal(get('restart-admin').hidden, true);
+  assert.equal(get('recording-access-warning').hidden, true);
 });
