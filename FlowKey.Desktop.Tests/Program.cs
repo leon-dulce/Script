@@ -35,7 +35,7 @@ if (selectedWindow is null || selectedWindow.Value.Handle != sampleWindow.Handle
 if (WindowSelection.Find([sampleWindow], "123", _ => false) is not null) throw new Exception("Closed window was selected.");
 Console.WriteLine("PASS window selection retains the chosen handle");
 
-// The stateless decoder preserves event identity; the capture filter below removes held-key repeats.
+// The decoder and capture filter preserve every Down, including typematic repeats.
 foreach (var key in new uint[] { 0x41, 0x10, 0x11, 0x12, 0x5B, 0x5C, 0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0x77, 0x78, 0x7A, 0x7B })
 {
     var down = KeyboardStepFactory.Create(key, 0, false, 0x79);
@@ -137,16 +137,18 @@ var transitions = new KeyTransitionFilter();
 bool Transition(uint key, bool up = false) => transitions.Accept(KeyboardStepFactory.Create(key, 0, up, 0x79)!);
 if (Transition(0x27, true) || !Transition(0x27)) throw new Exception("Initial key transition incorrect.");
 for (var repeatIndex = 0; repeatIndex < 100; repeatIndex++)
-    if (Transition(0x27)) throw new Exception("Held key auto-repeat was recorded.");
-if (!Transition(0x41) || Transition(0x27) || !Transition(0x27, true) || Transition(0x27, true) ||
+    if (!Transition(0x27)) throw new Exception("Held key auto-repeat was discarded.");
+if (!Transition(0x41) || !Transition(0x27) || !Transition(0x27, true) || Transition(0x27, true) ||
     !Transition(0x41, true) || !Transition(0x27) || !Transition(0x27, true))
     throw new Exception("Overlapping keys, release or repress lost its transition.");
+if (!Transition(0xA4) || !Transition(0xA4) || !Transition(0xA4, true) || Transition(0xA4, true))
+    throw new Exception("Held Alt repeat or release was lost.");
 if (!Transition(0xA0) || !Transition(0xA1) || !Transition(0xA0, true) || !Transition(0xA1, true))
     throw new Exception("Left and right modifiers were merged.");
 Transition(0x41);
 if (!new KeyTransitionFilter().Accept(KeyboardStepFactory.Create(0x41, 0, false, 0x79)!))
     throw new Exception("New recording inherited held keys.");
-Console.WriteLine("PASS held-key repeat suppression, overlapping keys, release/repress, modifier sides and recording reset");
+Console.WriteLine("PASS held-key repeats, overlapping keys, release/repress, modifier sides and recording reset");
 
 FlowPreferencesTests.Run();
 var activation = new WindowActivationWait(0);

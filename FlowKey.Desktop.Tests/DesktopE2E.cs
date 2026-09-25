@@ -71,6 +71,7 @@ internal static class DesktopE2E
             VerifyShortcutConflictRecovery(app, hotkey);
             VerifyCrossProcessRecording(app);
             VerifyQAndAltReplay(target, editor);
+            VerifyHeldAltRecordingAndReplay(target, editor);
             var catalog = new ScriptCatalog(Path.Combine(root, "scripts"));
             if (EvalBool(app, "!document.getElementById('sidebar-library').hidden"))
                 throw new Exception("Saved scripts must be hidden in the recording workspace.");
@@ -141,15 +142,15 @@ internal static class DesktopE2E
             SendTestKey(app, otherFunctionKey, keyUp: true);
             SendTestKey(app, 0x41, flags: Native.InjectedKeyboard);
             SendTestKey(app, 0x41, keyUp: true, flags: Native.InjectedKeyboard);
-            Until(() => CurrentScript(app).Steps.Count == 4, "keyboard capture did not suppress held-key repeats or excluded the wrong function key");
-            if (!CurrentScript(app).Steps.Select(s => s.KeyAction).SequenceEqual([KeyAction.Down, KeyAction.Up, KeyAction.Down, KeyAction.Up]) ||
-                CurrentScript(app).Steps[0].DelayMs < 80 || CurrentScript(app).Steps[1].DelayMs < 250)
+            Until(() => CurrentScript(app).Steps.Count == 5, "keyboard capture lost a held-key repeat or included the wrong function key");
+            if (!CurrentScript(app).Steps.Select(s => s.KeyAction).SequenceEqual([KeyAction.Down, KeyAction.Down, KeyAction.Up, KeyAction.Down, KeyAction.Up]) ||
+                CurrentScript(app).Steps[0].DelayMs < 80 || CurrentScript(app).Steps[2].DelayMs < 250)
                 throw new Exception("Keyboard actions or their elapsed delays were not preserved.");
-            Until(() => EvalBool(app, "document.querySelectorAll('#steps .step').length===4"),
+            Until(() => EvalBool(app, "document.querySelectorAll('#steps .step').length===5"),
                 "the recording screen did not show every captured key event while recording");
             if (Text(app, "status-text") != "正在錄製" ||
                 EvalString(app, "Array.from(document.querySelectorAll('#steps .step-copy strong'),e=>e.textContent).join('|')") !=
-                    "按下按鍵|鬆開按鍵|按下按鍵|鬆開按鍵" ||
+                    "按下按鍵|按下按鍵|鬆開按鍵|按下按鍵|鬆開按鍵" ||
                 EvalString(app, "Array.from(document.querySelectorAll('#steps .step-interval'),e=>e.textContent).join('|')") !=
                     string.Join("|", CurrentScript(app).Steps.Select(s => $"間隔 {s.DelayMs} 毫秒")))
                 throw new Exception("Live keyboard mismatch: " + Text(app, "status-text") + " labels=" + EvalString(app, "Array.from(document.querySelectorAll('#steps .step-copy strong'),e=>e.textContent).join('|')") + " intervals=" + EvalString(app, "Array.from(document.querySelectorAll('#steps .step-interval'),e=>e.textContent).join('|')") + " expected=" + string.Join("|", CurrentScript(app).Steps.Select(s => $"間隔 {s.DelayMs} 毫秒")));
@@ -164,7 +165,7 @@ internal static class DesktopE2E
             WaitForNamedSave(app, catalog, secondId, "E2E keys", 2);
             if (!catalog.Load(firstId)!.Steps.Select(s => s.Text).SequenceEqual(["X", "Y"]))
                 throw new Exception("Starting a second recording overwrote the first script.");
-            if (!catalog.Load(secondId)!.Steps.Select(s => s.Keys.Single()).SequenceEqual([0x5A, 0x5A, (int)otherFunctionKey, (int)otherFunctionKey]))
+            if (!catalog.Load(secondId)!.Steps.Select(s => s.Keys.Single()).SequenceEqual([0x5A, 0x5A, 0x5A, (int)otherFunctionKey, (int)otherFunctionKey]))
                 throw new Exception("Saved keyboard events differ from the recording callbacks.");
             SetPlan(app, "Count", 2, 250);
             Until(() => catalog.Load(secondId)!.Execution.RepeatCount == 2, "second script execution settings did not save");
@@ -175,7 +176,7 @@ internal static class DesktopE2E
                 CurrentScript(app).Execution.RepeatCount == 2 && CurrentScript(app).Hotkey == hotkey,
                 "recording workspace restored stale execution settings or hotkey for its saved script");
             Post(app, "{action:'text',value:'must not append to saved recording'}");
-            if (CurrentScript(app).Steps.Count != 4) throw new Exception("Saved recording accepted a new text step.");
+            if (CurrentScript(app).Steps.Count != 5) throw new Exception("Saved recording accepted a new text step.");
             SetRecordedDelay(app, 0, 150);
             Until(() => catalog.Load(secondId)!.Steps[0].DelayMs == 150 && catalog.Load(secondId)!.Hotkey == hotkey,
                 "editing the recording overwrote its automatically saved execution hotkey");
@@ -249,7 +250,7 @@ internal static class DesktopE2E
             Console.WriteLine("PASS Windows UI: start button waits for target focus and executes exactly once");
 
             OpenLibraryScript(app, catalog, secondId);
-            Until(() => Text(app, "execution-step-count") == "4 個步驟" && Text(app, "execution-steps").Contains("Z"),
+            Until(() => Text(app, "execution-step-count") == "5 個步驟" && Text(app, "execution-steps").Contains("Z"),
                 "selecting another saved script did not replace the execution steps");
             hotkey = catalog.Load(secondId)!.Hotkey;
             var conflictingHotkey = "F" + (otherFunctionKey - 0x70 + 1);
@@ -266,28 +267,28 @@ internal static class DesktopE2E
             keyEvents.Clear();
             ActivateTarget(target, editor);
             PressHotkey(hotkey);
-            Until(() => RelevantKeys().Length >= 4 && Text(app, "status-text") == "準備好了",
+            Until(() => RelevantKeys().Length >= 5 && Text(app, "status-text") == "準備好了",
                 "recorded key actions did not replay as actual Windows key-down and key-up events");
-            if (!RelevantKeys().SequenceEqual(new[] { (Key.Z, false), (Key.Z, true), (functionKey, false), (functionKey, true) }))
+            if (!RelevantKeys().SequenceEqual(new[] { (Key.Z, false), (Key.Z, false), (Key.Z, true), (functionKey, false), (functionKey, true) }))
                 throw new Exception("Windows key replay did not preserve the recorded down and up sequence.");
 
             // Extend only this isolated fixture's release delay so stop is exercised while Z
             // is held. Observe actual routed key events, independent of IME or Caps Lock text.
-            var releaseDelay = CurrentScript(app).Steps[1].DelayMs;
-            CurrentScript(app).Steps[1].DelayMs = 3000;
+            var releaseDelay = CurrentScript(app).Steps[2].DelayMs;
+            CurrentScript(app).Steps[2].DelayMs = 3000;
             keyEvents.Clear();
             ActivateTarget(target, editor);
             PressHotkey(hotkey);
-            Until(() => RelevantKeys().Count(e => e.Key == Key.Z && !e.Up) == 1 &&
+            Until(() => RelevantKeys().Count(e => e.Key == Key.Z && !e.Up) == 2 &&
                 !RelevantKeys().Any(e => e.Up), "held-key replay did not reach the delay before key release");
             PressHotkey(hotkey);
             Until(() => Text(app, "status-text") == "準備好了" && RelevantKeys().Any(e => e.Key == Key.Z && e.Up),
                 "shortcut stop did not release the key held by replay");
             PumpFor(150);
-            if (!RelevantKeys().SequenceEqual(new[] { (Key.Z, false), (Key.Z, true) }) ||
+            if (!RelevantKeys().SequenceEqual(new[] { (Key.Z, false), (Key.Z, false), (Key.Z, true) }) ||
                 (Native.GetAsyncKeyState(0x5A) & 0x8000) != 0)
                 throw new Exception("Stopping held-key replay left a key pressed or executed subsequent steps.");
-            CurrentScript(app).Steps[1].DelayMs = releaseDelay;
+            CurrentScript(app).Steps[2].DelayMs = releaseDelay;
             Console.WriteLine("PASS Windows UI: recorded-shortcut conflict rejection preserves the working shortcut; actual key-down/up replay and held-key stop cleanup");
 
             OpenLibraryScript(app, catalog, firstId);
@@ -383,11 +384,11 @@ internal static class DesktopE2E
             OpenLibraryScript(app, catalog, secondId);
             hotkey = catalog.Load(secondId)!.Hotkey;
             SetPlan(app, "Once", 2, 250);
-            CurrentScript(app).Steps[1].DelayMs = 3000;
+            CurrentScript(app).Steps[2].DelayMs = 3000;
             keyEvents.Clear();
             ActivateTarget(target, editor);
             PressHotkey(hotkey);
-            Until(() => RelevantKeys().Count(e => e.Key == Key.Z && !e.Up) == 1 && !RelevantKeys().Any(e => e.Up),
+            Until(() => RelevantKeys().Count(e => e.Key == Key.Z && !e.Up) == 2 && !RelevantKeys().Any(e => e.Up),
                 "close-test replay did not hold the key before release");
             var playbackKeyboard = typeof(MainWindow).GetField("_playbackKeyboard", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(app)!;
             var heldKeys = (ICollection<ushort>)typeof(KeyboardPlayback).GetField("_held", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(playbackKeyboard)!;
@@ -398,7 +399,7 @@ internal static class DesktopE2E
             if (heldKeys.Count != 0) throw new Exception("Closing the app did not synchronously release its tracked playback keys.");
             Until(() => !app.IsVisible && RelevantKeys().Any(e => e.Key == Key.Z && e.Up) &&
                 (Native.GetAsyncKeyState(0x5A) & 0x8000) == 0, "closing the app left its playback key held in Windows");
-            if (!RelevantKeys().SequenceEqual(new[] { (Key.Z, false), (Key.Z, true) }))
+            if (!RelevantKeys().SequenceEqual(new[] { (Key.Z, false), (Key.Z, false), (Key.Z, true) }))
                 throw new Exception("Closing playback emitted extra key events or ran subsequent steps.");
             Console.WriteLine("PASS Windows UI: closing during held-key replay releases keys synchronously and delivers Windows key-up");
         }
@@ -832,6 +833,68 @@ internal static class DesktopE2E
                     throw new Exception("Windows did not receive the expected Q/Alt scan-code transitions.");
             }
             Console.WriteLine("PASS Windows Q and left/right Alt scan-code delivery, held state and release");
+        }
+        finally { keyboard.ReleaseAll(); Native.UnhookWindowsHookEx(hook); GC.KeepAlive(hookCallback); }
+    }
+
+    private static void VerifyHeldAltRecordingAndReplay(Window target, TextBox editor)
+    {
+        ActivateTarget(target, editor);
+        var steps = new List<ScriptStep>();
+        using (var capture = new KeyboardCapture(0x79))
+        {
+            void SendAlt(bool up)
+            {
+                if (Native.GetForegroundWindow() != _keyboardTarget) throw new Exception("Held Alt target lost focus.");
+                var input = Native.CreateKeyInput(0xA4, up);
+                input.Key.ExtraInfo = 0;
+                if (Native.SendInput(1, [input], Marshal.SizeOf<Native.Input>()) != 1)
+                    throw new Exception("Windows rejected held Alt test input.");
+                PumpFor(90);
+            }
+            try
+            {
+                SendAlt(false);
+                SendAlt(false);
+                SendAlt(false);
+            }
+            finally { SendAlt(true); }
+            capture.Dispose();
+            var recorder = new StepRecorder();
+            recorder.Reset(capture.StartedAt);
+            while (capture.TryDequeue(out var item)) recorder.Add(steps, item.Step, item.Tick);
+        }
+        if (steps.Count != 4 || !steps.All(step => step.Keys.SequenceEqual([0xA4])) ||
+            !steps.Select(step => step.KeyAction).SequenceEqual([KeyAction.Down, KeyAction.Down, KeyAction.Down, KeyAction.Up]) ||
+            steps.Skip(1).Any(step => step.DelayMs < 60))
+            throw new Exception("Windows held Alt recording lost repeat events, release, or timing.");
+
+        var observed = new List<bool>();
+        Native.HookCallback hookCallback = (code, message, pointer) =>
+        {
+            if (code >= 0)
+            {
+                var data = Marshal.PtrToStructure<Native.KeyboardData>(pointer);
+                if (data.ExtraInfo == Native.ReplayInputTag && data.VkCode == 0xA4)
+                    observed.Add(message is Native.KeyUp or Native.SysKeyUp);
+            }
+            return Native.CallNextHookEx(0, code, message, pointer);
+        };
+        var hook = Native.SetWindowsHookEx(Native.KeyboardHook, hookCallback, Native.GetModuleHandle(null), 0);
+        if (hook == 0) throw new Exception("Held Alt replay observation hook unavailable.");
+        var layout = Native.GetKeyboardLayout(Native.GetWindowThreadProcessId(_keyboardTarget, out _));
+        var keyboard = new KeyboardPlayback((key, up) => Native.SendKey(key, up, layout: layout));
+        try
+        {
+            foreach (var step in steps)
+            {
+                PumpFor(step.DelayMs);
+                keyboard.Execute(step);
+                PumpFor(20);
+            }
+            if (!observed.SequenceEqual([false, false, false, true]) || (Native.GetAsyncKeyState(0xA4) & 0x8000) != 0)
+                throw new Exception("Windows held Alt replay did not deliver all repeated downs and final release.");
+            Console.WriteLine("PASS Windows held Alt capture and replay preserves repeated downs, timing, and release");
         }
         finally { keyboard.ReleaseAll(); Native.UnhookWindowsHookEx(hook); GC.KeepAlive(hookCallback); }
     }

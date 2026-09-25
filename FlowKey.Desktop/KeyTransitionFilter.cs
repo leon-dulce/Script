@@ -13,9 +13,17 @@ internal sealed class KeyTransitionFilter
         var key = step.Keys[0];
         return step.KeyAction switch
         {
-            KeyAction.Down => _held.Add(key),
+            // Windows emits another Down for each typematic repeat. Games can act on
+            // every one of those events, so keep them while the key remains held.
+            KeyAction.Down => AcceptDown(key),
             KeyAction.Up => _held.Remove(key),
             _ => false
         };
+    }
+
+    private bool AcceptDown(int key)
+    {
+        _held.Add(key);
+        return true;
     }
 }
