@@ -34,7 +34,9 @@ public partial class MainWindow : Window
     private bool _pageReady;
     private bool _pendingRecord, _pendingRun, _waitingForNextRun, _dirty;
 
-    public MainWindow(string? dataDirectory = null)
+    public MainWindow() : this(null) { }
+
+    public MainWindow(string? dataDirectory)
     {
         _dataDirectory = dataDirectory ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FlowKey");
         _catalog = new ScriptCatalog(Path.Combine(_dataDirectory, "scripts"));

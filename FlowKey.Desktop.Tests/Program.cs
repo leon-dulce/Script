@@ -2,6 +2,10 @@ using System.Runtime.InteropServices;
 using System.IO;
 using FlowKey.Desktop;
 
+if (typeof(MainWindow).GetConstructor(Type.EmptyTypes) is null)
+    throw new Exception("WPF StartupUri requires a real parameterless MainWindow constructor.");
+Console.WriteLine("PASS WPF startup can construct MainWindow");
+
 if (Marshal.SizeOf<Native.Input>() != 40) throw new Exception("SendInput layout must be 40 bytes on x64.");
 if (Marshal.SizeOf<Native.KeyboardData>() != 24) throw new Exception("Keyboard hook layout mismatch.");
 if (Marshal.SizeOf<Native.MouseData>() != 32) throw new Exception("Mouse hook layout mismatch.");
