@@ -1,5 +1,8 @@
 using System.Diagnostics;
 using System.IO;
+using System.Reflection;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
@@ -11,6 +14,12 @@ using FlowKey.Desktop;
 internal static class DesktopE2E
 {
     private sealed class DesktopUnavailableException(string message) : Exception(message);
+    private static nint _keyboardTarget;
+
+    [DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
+    [DllImport("user32.dll", SetLastError = true)] private static extern bool AttachThreadInput(uint currentThread, uint foregroundThread, bool attach);
+    [DllImport("user32.dll")] private static extern bool SetForegroundWindow(nint handle);
+    [DllImport("user32.dll")] private static extern bool BringWindowToTop(nint handle);
 
     public static void Run()
     {
@@ -46,100 +55,201 @@ internal static class DesktopE2E
             app.Show();
             Until(() => loaded, "embedded interface did not load", 30000);
             target.Show();
+            _keyboardTarget = new WindowInteropHelper(target).Handle;
+            if (Environment.GetEnvironmentVariable("FLOWKEY_E2E_MANUAL_FOCUS") == "1")
+                WaitForInitialTargetFocus(target);
             ActivateTarget(target, editor);
-            Post(app, "{action:'refresh'}");
-            var handle = new WindowInteropHelper(target).Handle;
-            Until(() => Native.ListWindows(new WindowInteropHelper(app).Handle).Any(w => w.Handle == handle), "test target not listed");
-            Post(app, "{action:'select',value:'" + handle + "'}");
-            Until(() => Text(app, "window-name") == targetName, "target selection was not confirmed");
-
             var hotkey = ChooseHotkey(app);
-            Post(app, "{action:'record'}");
-            ActivateTarget(target, editor);
-            Until(() => Text(app, "status-text") == "正在录制", "recording did not begin in selected window");
-            PressHotkey(hotkey);
-            Until(() => Text(app, "status-text") == "就绪，等待操作", "hotkey did not finish recording");
-            Eval(app, "window.prompt=()=> 'X'; document.getElementById('add-text').click()");
-            Until(() => Text(app, "step-count") == "1 个步骤", "text step was not added");
-            Eval(app, "document.getElementById('script-name').value='E2E repeat';document.getElementById('script-name').dispatchEvent(new Event('change'))");
-            Until(() => Text(app, "execution-script-name").Contains("E2E repeat"), "script name did not update");
+            var catalog = new ScriptCatalog(Path.Combine(root, "scripts"));
             if (EvalBool(app, "!document.getElementById('sidebar-library').hidden"))
                 throw new Exception("Saved scripts must be hidden in the recording workspace.");
+            if (!EvalBool(app, "['load-button','save-button','new-editor-script','window-select'].every(id=>!document.getElementById(id)||document.getElementById(id).hidden)"))
+                throw new Exception("Recording still exposes manual save, reload, new-script, or window-picker controls.");
             Eval(app, "document.getElementById('nav-execution').click()");
-            Until(() => EvalBool(app, "!document.getElementById('execution-view').hidden && !document.getElementById('sidebar-library').hidden"),
-                "execution workspace or saved scripts did not open");
+            Until(() => EvalBool(app, "!document.getElementById('execution-view').hidden && document.getElementById('execution-start').disabled"),
+                "empty execution library must disable playback");
+            Eval(app, "document.getElementById('nav-editor').click()");
+            Until(() => EvalBool(app, "!document.getElementById('workspace-view').hidden"), "recording workspace did not open");
 
-            SetPlan(app, "Count", 3, 100);
-            Eval(app, "document.getElementById('save-execution').click()");
-            var catalog = new ScriptCatalog(Path.Combine(root, "scripts"));
-            Until(() => catalog.List().Scripts.Count == 1, "script was not saved to the library");
-            Until(() => Text(app, "execution-message").Contains("已保存"), "execution save did not show confirmation");
-            if (!EvalBool(app, "!document.getElementById('execution-view').hidden"))
-                throw new Exception("Saving execution settings returned to the recording workspace.");
-            var saved = catalog.List().Scripts.Single();
-            if (saved.Execution.Mode != ExecutionMode.Count || saved.Execution.RepeatCount != 3 || saved.Execution.IntervalMs != 100)
-                throw new Exception("Saved repeat plan differs from the execution screen.");
-            if (Text(app, "saved-scripts").Contains("E2E repeat") == false)
-                throw new Exception("Saved script is absent from the sidebar.");
             ActivateTarget(target, editor);
-            Eval(app, "document.getElementById('execution-start').click()");
-            Until(() => editor.Text == "XXX", "count mode did not run three times", 12000);
+            PressHotkey(hotkey);
+            Until(() => Text(app, "status-text") == "正在录制" && Text(app, "window-name") == targetName,
+                "hotkey did not capture the foreground target and start recording without a picker");
+            AddTestRecordedText(app, "X");
+            AddTestRecordedText(app, "Y");
+            PressHotkey(hotkey);
+            Until(() => Text(app, "status-text") == "就绪，等待操作" && catalog.List().Scripts.Count == 1,
+                "recording-end hotkey did not automatically save the script");
+            var firstId = catalog.List().Scripts.Single().Id;
+            SetRecordedDelay(app, 0, 400);
+            SetRecordedDelay(app, 1, 700);
+            Until(() => catalog.Load(firstId)!.Steps.Select(s => s.DelayMs).SequenceEqual([400, 700]),
+                "recording edits did not automatically persist");
+
+            ActivateTarget(target, editor);
+            PressHotkey(hotkey);
+            Until(() => Text(app, "status-text") == "正在录制" && Text(app, "step-count") == "0 个步骤",
+                "second recording did not begin a fresh script");
+            AddTestRecordedText(app, "Z");
+            ActivateWindow(app);
+            Until(() => Text(app, "status-text") == "录制已暂停", "recording did not pause when its target lost focus");
+            Eval(app, "document.getElementById('finish-button').click()");
+            Until(() => Text(app, "status-text") == "就绪，等待操作" && catalog.List().Scripts.Count == 2,
+                "finish button did not save a paused recording");
+            var secondId = catalog.List().Scripts.Single(s => s.Id != firstId).Id;
+            if (!catalog.Load(firstId)!.Steps.Select(s => s.Text).SequenceEqual(["X", "Y"]))
+                throw new Exception("Starting a second recording overwrote the first script.");
+            Eval(app, "document.getElementById('nav-execution').click()");
+            Until(() => EvalBool(app, "!document.getElementById('execution-view').hidden") && CurrentScript(app).Id == secondId,
+                "latest completed recording was not selected for execution");
+            SetPlan(app, "Count", 2, 250);
+            Until(() => catalog.Load(secondId)!.Execution.RepeatCount == 2, "second script execution settings did not save");
+            hotkey = ChooseHotkey(app, "execution-hotkey", hotkey);
+            Until(() => catalog.Load(secondId)!.Hotkey == hotkey, "alternate execution hotkey did not save");
+            Eval(app, "document.getElementById('nav-editor').click()");
+            Until(() => EvalBool(app, "!document.getElementById('workspace-view').hidden") &&
+                CurrentScript(app).Execution.RepeatCount == 2 && CurrentScript(app).Hotkey == hotkey,
+                "recording workspace restored stale execution settings or hotkey for its saved script");
+            SetRecordedDelay(app, 0, 150);
+            Until(() => catalog.Load(secondId) is { Steps: [{ DelayMs: 150 }] } && catalog.Load(secondId)!.Hotkey == hotkey,
+                "editing the recording overwrote its automatically saved execution hotkey");
+
+            ActivateTarget(target, editor);
+            PressHotkey(hotkey);
+            Until(() => Text(app, "status-text") == "正在录制", "empty recording did not start");
+            PressHotkey(hotkey);
+            Until(() => Text(app, "status-text") == "就绪，等待操作", "empty recording did not finish");
+            if (catalog.List().Scripts.Count != 2) throw new Exception("An empty recording created a saved script.");
+            Console.WriteLine("PASS Windows UI: real foreground hotkeys, automatic save, independent recordings, paused finish, and empty recording; step input seeded via recording callback");
+
+            Eval(app, "document.getElementById('run-button').click()");
+            Until(() => EvalBool(app, "!document.getElementById('execution-view').hidden && !document.getElementById('sidebar-library').hidden && document.querySelectorAll('.saved-script').length===2"),
+                "opening scripts did not show the execution workspace and every saved script");
+            if (!EvalBool(app, "!document.getElementById('save-execution') && !document.getElementById('new-script')"))
+                throw new Exception("Execution still exposes recording or save-settings controls.");
+            OpenLibraryScript(app, catalog, firstId);
+            if (!EvalBool(app, "document.querySelectorAll('#execution-steps .step').length===2 && !document.querySelector('#execution-steps input, #execution-steps button')"))
+                throw new Exception("Execution must display every step read-only.");
+            SetPlan(app, "Count", 3, 250);
+            Until(() => catalog.Load(firstId) is { Execution.Mode: ExecutionMode.Count, Execution.RepeatCount: 3, Execution.IntervalMs: 250 },
+                "execution mode did not automatically save");
+            Post(app, "{action:'execution',mode:'Count',count:0,intervalMs:250}");
+            if (catalog.Load(firstId)!.Execution.RepeatCount != 3) throw new Exception("Invalid repeat count changed the saved plan.");
+            hotkey = ChooseHotkey(app, "execution-hotkey");
+            Until(() => catalog.Load(firstId)!.Hotkey == hotkey, "execution hotkey was not automatically saved");
+            ActivateTarget(target, editor);
+            PressHotkey(hotkey);
+            Until(() => EvalBool(app, "document.querySelector('#execution-steps .step[aria-current=step] .step-number')?.textContent==='01'") &&
+                Text(app, "execution-current-action").Contains("X"), "execution did not highlight and describe its first step");
+            Until(() => EvalBool(app, "document.querySelector('#execution-steps .step[aria-current=step] .step-number')?.textContent==='02'") &&
+                Text(app, "execution-current-action").Contains("Y"), "execution did not follow its second step");
+            Until(() => Text(app, "execution-current-action").Contains("等待 250 毫秒"), "execution did not display the interval between rounds");
+            Until(() => editor.Text == "XYXYXY", "count mode did not run three complete rounds", 12000);
             Until(() => Text(app, "status-text") == "就绪，等待操作", "count mode did not finish");
             if (!EvalBool(app, "!document.getElementById('execution-view').hidden"))
                 throw new Exception("Starting execution returned to the recording workspace.");
-            Console.WriteLine("PASS Windows UI: select, record hotkey, save, sidebar, and three execution rounds");
+            if (EvalBool(app, "!!document.querySelector('#execution-steps [aria-current=step]')"))
+                throw new Exception("A finished execution retained an active-step highlight.");
+            Console.WriteLine("PASS Windows UI: all saved scripts, automatic execution settings, actual three-round replay, and live read-only step highlights");
 
-            SetPlan(app, "Continuous", 3, 100);
+            SetPlan(app, "Continuous", 3, 250);
             ActivateTarget(target, editor);
-            Eval(app, "document.getElementById('execution-start').click()");
-            Until(() => editor.Text.Length >= 5, "continuous mode did not repeat", 10000);
+            PressHotkey(hotkey);
+            Until(() => editor.Text.Length >= 10, "continuous mode did not repeat", 10000);
             PressHotkey(hotkey);
             Until(() => Text(app, "status-text") == "就绪，等待操作", "hotkey did not stop continuous execution");
             var stoppedLength = editor.Text.Length;
-            PumpFor(900);
+            PumpFor(1400);
             if (editor.Text.Length != stoppedLength) throw new Exception("Continuous execution continued after stop.");
             Console.WriteLine("PASS Windows UI: continuous execution and hotkey stop");
 
-            SetPlan(app, "Once", 3, 100);
-            ActivateTarget(target, editor);
+            SetPlan(app, "Once", 3, 250);
+            ActivateWindow(app);
             Eval(app, "document.getElementById('execution-start').click()");
-            Until(() => editor.Text.Length == stoppedLength + 1, "once mode did not execute exactly once", 10000);
+            Until(() => Text(app, "execution-progress-label") == "等待目标窗口", "start button did not wait for the target window");
+            ActivateTarget(target, editor);
+            Until(() => editor.Text.Length == stoppedLength + 2, "once mode did not execute exactly once", 10000);
             Until(() => Text(app, "status-text") == "就绪，等待操作", "once mode did not finish");
-            PumpFor(300);
-            if (editor.Text.Length != stoppedLength + 1) throw new Exception("Once mode repeated unexpectedly.");
-            Console.WriteLine("PASS Windows UI: one-shot execution");
+            PumpFor(1400);
+            if (editor.Text.Length != stoppedLength + 2 || !editor.Text.EndsWith("XY")) throw new Exception("Once mode repeated unexpectedly.");
+            Console.WriteLine("PASS Windows UI: start button waits for target focus and executes exactly once");
 
-            Eval(app, "document.getElementById('save-execution').click()");
-            Until(() => Text(app, "execution-message").Contains("已保存"), "one-shot plan did not save");
-            Eval(app, "document.getElementById('new-script').click()");
-            Until(() => EvalString(app, "document.getElementById('script-name').value") == "未命名脚本", "new script was not created");
-            if (EvalBool(app, "!document.getElementById('sidebar-library').hidden"))
-                throw new Exception("Saved scripts remained visible after returning to recording.");
-            Eval(app, "document.getElementById('script-name').value='E2E second';document.getElementById('script-name').dispatchEvent(new Event('change'))");
-            Eval(app, "document.getElementById('save-button').click()");
-            Until(() => catalog.List().Scripts.Count == 2, "second script was not saved");
-            Eval(app, "document.getElementById('nav-execution').click()");
-            Eval(app, "Array.from(document.querySelectorAll('.saved-script')).find(b=>b.textContent.includes('E2E repeat')).click()");
-            Until(() => EvalString(app, "document.getElementById('script-name').value") == "E2E repeat", "library script did not open");
-            if (EvalString(app, "document.getElementById('execution-window-select').value") != "")
-                throw new Exception("Opening a saved script must require target confirmation.");
-            Eval(app, "document.getElementById('execution-start').click()");
-            Until(() => Text(app, "execution-message").Contains("请先选择目标窗口"), "missing target did not explain why execution could not start");
-            Eval(app, "document.getElementById('execution-window-select').value='" + handle + "';document.getElementById('execution-window-select').dispatchEvent(new Event('change'))");
-            Until(() => EvalString(app, "document.getElementById('execution-window-select').value") == handle.ToString(), "execution target was not confirmed");
+            OpenLibraryScript(app, catalog, secondId);
+            hotkey = catalog.Load(secondId)!.Hotkey;
+            Until(() => Text(app, "execution-step-count") == "1 个步骤" && Text(app, "execution-steps").Contains("Z"),
+                "selecting another saved script did not replace the execution steps");
+            SetPlan(app, "Once", 2, 250);
+            var beforeMismatch = editor.Text;
+            var width = target.Width;
+            target.Width += 100;
             ActivateTarget(target, editor);
-            var afterReopen = editor.Text.Length;
-            Eval(app, "document.getElementById('execution-start').click()");
-            Until(() => editor.Text.Length == afterReopen + 1, "saved script did not execute from execution workspace", 10000);
-            Until(() => Text(app, "status-text") == "就绪，等待操作", "saved script run did not finish");
-            Eval(app, "Array.from(document.querySelectorAll('.saved-script')).find(b=>b.textContent.includes('E2E second')).click()");
-            Until(() => EvalString(app, "document.getElementById('script-name').value") == "E2E second", "second library script did not open");
-            Eval(app, "window.confirm=()=>true;document.getElementById('delete-script').click()");
-            Until(() => catalog.List().Scripts.Count == 1, "sidebar delete did not remove script");
-            Console.WriteLine("PASS Windows UI: execution-only library, target reselection, save/run feedback, and script management");
+            PressHotkey(hotkey);
+            Until(() => Text(app, "execution-message").Contains("尺寸与脚本不符"), "mismatched target dimensions were not rejected");
+            PumpFor(300);
+            if (editor.Text != beforeMismatch) throw new Exception("Replay sent input to an incompatible target window.");
+            target.Width = width;
+            ActivateTarget(target, editor);
+            PressHotkey(hotkey);
+            Until(() => editor.Text == beforeMismatch + "Z", "selected saved script did not execute by foreground shortcut");
+            Until(() => Text(app, "status-text") == "就绪，等待操作", "selected script did not finish");
+            Eval(app, "document.getElementById('nav-editor').click()");
+            Until(() => EvalBool(app, "!document.getElementById('workspace-view').hidden"), "recording navigation failed");
+            if (EvalBool(app, "!document.getElementById('sidebar-library').hidden"))
+                throw new Exception("Saved scripts remained visible in the recording workspace.");
+            Console.WriteLine("PASS Windows UI: library selection, shortcut target capture, target-size failure, and separate recording workspace");
+
+            ActivateWindow(app);
+            Eval(app, "document.getElementById('record-button').click()");
+            Until(() => Text(app, "record-button").Contains("取消等待录制"), "record button did not wait for the target window");
+            ActivateTarget(target, editor);
+            Until(() => Text(app, "status-text") == "正在录制", "save-failure recording did not start");
+            AddTestRecordedText(app, "R");
+            var recoveryId = CurrentScript(app).Id;
+            var blocker = Path.Combine(root, "scripts", recoveryId + ".json");
+            Directory.CreateDirectory(blocker);
+            PressHotkey(hotkey);
+            Until(() => Text(app, "status-hint").Contains("保存失败"), "automatic-save failure was not shown");
+            if (CurrentScript(app).Steps.Count != 1 || catalog.List().Scripts.Count != 2)
+                throw new Exception("Automatic-save failure lost recorded steps or reported a saved file.");
+            Post(app, "{action:'hotkey',value:'" + hotkey + "'}");
+            if (!(bool)typeof(MainWindow).GetField("_dirty", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(app)!)
+                throw new Exception("A hotkey edit cleared the dirty state after automatic-save failure.");
+            ActivateTarget(target, editor);
+            PressHotkey(hotkey);
+            PumpFor(150);
+            if (CurrentScript(app).Id != recoveryId || Text(app, "status-text") != "就绪，等待操作")
+                throw new Exception("Starting another recording discarded an unsaved draft after save failure.");
+            Eval(app, "document.getElementById('nav-execution').click()");
+            Until(() => EvalBool(app, "!document.getElementById('workspace-view').hidden"), "save failure did not keep the recording draft visible");
+            Directory.Delete(blocker);
+            Eval(app, "document.getElementById('nav-execution').click()");
+            Until(() => catalog.List().Scripts.Count == 3 && EvalBool(app, "!document.getElementById('execution-view').hidden"),
+                "retry after save failure did not persist the draft and open execution");
+            Console.WriteLine("PASS Windows UI: automatic-save failure retains the draft and navigation retries saving");
+
+            Eval(app, "document.getElementById('nav-editor').click()");
+            Until(() => EvalBool(app, "!document.getElementById('workspace-view').hidden") && CurrentScript(app).Id == recoveryId,
+                "recovered recording draft did not reopen");
+            var temporaryBlocker = Path.Combine(root, "scripts", recoveryId + ".json.tmp");
+            Directory.CreateDirectory(temporaryBlocker);
+            Eval(app, "document.querySelector('#steps .step-delete[title=\"删除步骤\"]').click()");
+            Until(() => CurrentScript(app).Steps.Count == 0 && Text(app, "status-hint").Contains("保存失败"),
+                "deleting the final step did not expose the save failure");
+            Eval(app, "document.getElementById('nav-execution').click()");
+            Until(() => EvalBool(app, "!document.getElementById('workspace-view').hidden"),
+                "navigation discarded an unsaved final-step deletion");
+            if (catalog.Load(recoveryId)!.Steps.Count != 1)
+                throw new Exception("A failed final-step deletion unexpectedly altered the saved file.");
+            Directory.Delete(temporaryBlocker);
+            Eval(app, "document.getElementById('nav-execution').click()");
+            Until(() => catalog.Load(recoveryId)!.Steps.Count == 0 &&
+                EvalBool(app, "!document.getElementById('execution-view').hidden && document.getElementById('execution-start').disabled"),
+                "retry did not save the final-step deletion and disable empty-script playback");
+            Console.WriteLine("PASS Windows UI: failed deletion of the last step remains recoverable and empty saved scripts cannot run");
         }
         finally
         {
+            _keyboardTarget = 0;
             app.Close();
             target.Close();
             application.Shutdown();
@@ -151,21 +261,51 @@ internal static class DesktopE2E
         }
     }
 
-    private static string ChooseHotkey(MainWindow app)
+    private static string ChooseHotkey(MainWindow app, string control = "hotkey-select", string? exclude = null)
     {
-        foreach (var key in new[] { "F11", "F9", "F8", "F10" })
+        foreach (var key in new[] { "F11", "F9", "F8", "F10" }.Where(key => key != exclude))
         {
-            Post(app, "{action:'hotkey',value:'" + key + "'}");
-            if (EvalString(app, "document.getElementById('hotkey-select').value") == key &&
+            Eval(app, "document.getElementById('" + control + "').value='" + key + "';document.getElementById('" + control + "').dispatchEvent(new Event('change'))");
+            PumpFor(80);
+            if (EvalString(app, "document.getElementById('" + control + "').value") == key &&
                 !Text(app, "status-hint").Contains("占用")) return key;
         }
         throw new Exception("No global shortcut could be registered for the desktop test.");
+    }
+
+    private static ScriptDocument CurrentScript(MainWindow app) =>
+        (ScriptDocument)typeof(MainWindow).GetField("_script", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(app)!;
+
+    private static void AddTestRecordedText(MainWindow app, string text)
+    {
+        // SendInput keyboard events are deliberately excluded by the physical-input recorder.
+        // Seed deterministic steps through its recording callback while the real window is focused
+        // and real hooks are installed; hotkeys, focus transitions, storage, UI, and replay use Windows.
+        typeof(MainWindow).GetMethod("AddRecordedStep", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(app, [new ScriptStep { Type = StepType.Text, Text = text }, Stopwatch.GetTimestamp()]);
+    }
+
+    private static void SetRecordedDelay(MainWindow app, int index, int milliseconds)
+    {
+        Eval(app, "(()=>{const input=document.querySelectorAll('#steps input.delay')[" + index + "];input.value='" + milliseconds + "';input.dispatchEvent(new Event('change'));})()");
+        Until(() => CurrentScript(app).Steps[index].DelayMs == milliseconds, "recorded step delay did not update");
+    }
+
+    private static void OpenLibraryScript(MainWindow app, ScriptCatalog catalog, string id)
+    {
+        var scripts = catalog.List().Scripts;
+        var index = scripts.ToList().FindIndex(script => script.Id == id);
+        if (index < 0) throw new Exception("Expected script missing from the catalog.");
+        Eval(app, "document.querySelectorAll('.saved-script')[" + index + "].click()");
+        Until(() => CurrentScript(app).Id == id && Text(app, "execution-step-count") == scripts[index].Steps.Count + " 个步骤",
+            "saved script did not open in the execution workspace");
     }
 
     private static void SetPlan(MainWindow app, string mode, int count, int interval)
     {
         Eval(app, "document.getElementById('repeat-count').value='" + count + "';" +
             "document.getElementById('repeat-interval').value='" + interval + "';" +
+            "document.querySelectorAll('input[name=execution-mode]').forEach(input=>input.checked=false);" +
             "document.getElementById('mode-" + mode.ToLowerInvariant() + "').checked=true;" +
             "document.getElementById('mode-" + mode.ToLowerInvariant() + "').dispatchEvent(new Event('change'))");
         Until(() => EvalBool(app, "document.getElementById('mode-" + mode.ToLowerInvariant() + "').checked && " +
@@ -173,20 +313,66 @@ internal static class DesktopE2E
             "document.getElementById('repeat-interval').value==='" + interval + "'"), "execution mode did not update");
     }
 
-    private static void ActivateTarget(Window target, TextBox editor)
+    private static void ActivateTarget(Window target, TextBox editor, [CallerLineNumber] int callerLine = 0)
     {
-        var handle = new WindowInteropHelper(target).Handle;
-        target.Activate();
+        ActivateWindow(target, callerLine);
         editor.Focus();
+    }
+
+    private static void WaitForInitialTargetFocus(Window target)
+    {
+        Console.WriteLine("WAIT Windows UI: click the input area in '" + target.Title + "' within 45 seconds to allow the desktop test to begin.");
+        var handle = new WindowInteropHelper(target).Handle;
+        var watch = Stopwatch.StartNew();
+        target.Topmost = true;
+        try
+        {
+            target.Activate();
+            Until(() => Native.GetForegroundWindow() == handle || watch.ElapsedMilliseconds >= 45000,
+                "initial manual-focus wait did not finish", 47000);
+            if (Native.GetForegroundWindow() != handle)
+                throw new DesktopUnavailableException("initial manual focus timed out after 45 seconds; no test input was sent");
+        }
+        finally { target.Topmost = false; }
+    }
+
+    private static void ActivateWindow(Window window, [CallerLineNumber] int callerLine = 0)
+    {
+        var handle = new WindowInteropHelper(window).Handle;
+        Native.GetWindowThreadProcessId(handle, out var processId);
+        if (handle == 0 || processId != Environment.ProcessId)
+            throw new InvalidOperationException("Only windows owned by this test may be activated.");
+        window.Activate();
+        if (Native.GetForegroundWindow() != handle)
+        {
+            // A background test runner may not initially have foreground permission. Briefly
+            // share the current foreground input queue while activating our own test window;
+            // never send a key/click to an unrelated window, and always detach before pumping.
+            var currentThread = GetCurrentThreadId();
+            var foregroundThread = Native.GetWindowThreadProcessId(Native.GetForegroundWindow(), out _);
+            var attached = foregroundThread != 0 && currentThread != foregroundThread &&
+                AttachThreadInput(currentThread, foregroundThread, true);
+            try
+            {
+                BringWindowToTop(handle);
+                SetForegroundWindow(handle);
+            }
+            finally
+            {
+                if (attached) AttachThreadInput(currentThread, foregroundThread, false);
+            }
+        }
         var watch = Stopwatch.StartNew();
         Until(() => Native.GetForegroundWindow() == handle || watch.ElapsedMilliseconds >= 1000,
             "foreground check did not return", 2000);
         if (Native.GetForegroundWindow() != handle)
-            throw new DesktopUnavailableException("the test window could not obtain foreground focus");
+            throw new DesktopUnavailableException($"test-owned window '{window.Title}' could not obtain foreground focus at DesktopE2E.cs:{callerLine}");
     }
 
-    private static void PressHotkey(string key)
+    private static void PressHotkey(string key, [CallerLineNumber] int callerLine = 0)
     {
+        if (_keyboardTarget == 0 || Native.GetForegroundWindow() != _keyboardTarget)
+            throw new DesktopUnavailableException($"test target lost focus before shortcut at DesktopE2E.cs:{callerLine}; no input was sent");
         var code = (ushort)(0x70 + int.Parse(key[1..]) - 1);
         Native.SendKey(code);
         Native.SendKey(code, true);

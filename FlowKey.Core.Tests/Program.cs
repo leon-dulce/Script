@@ -206,17 +206,22 @@ static void RecordingSteps()
 static void SessionTransitions()
 {
     var session = new SessionState();
-    Check(session.ResolveShortcut(false, false) == ShortcutAction.SelectTarget);
-    Check(session.ResolveShortcut(true, false) == ShortcutAction.StartRecording);
-    Check(session.ResolveShortcut(true, true) == ShortcutAction.StartRun);
+    Check(session.ResolveShortcut(false, false, true) == ShortcutAction.SelectTarget);
+    Check(session.ResolveShortcut(true, false, true) == ShortcutAction.StartRecording);
+    Check(session.ResolveShortcut(true, true, true) == ShortcutAction.StartRecording);
+    Check(session.ResolveShortcut(true, true, false) == ShortcutAction.StartRun);
+    Check(session.ResolveShortcut(true, false, false) == ShortcutAction.SelectScript);
+    Check(session.ResolveShortcut(false, false, false) == ShortcutAction.SelectScript);
+    Check(session.ResolveShortcut(false, true, false) == ShortcutAction.SelectTarget);
     Check(session.Mode == "ready" && session.BeginRun());
-    Check(session.ResolveShortcut(true, true) == ShortcutAction.StopRun);
+    Check(session.ResolveShortcut(true, true, false) == ShortcutAction.StopRun);
+    Check(session.ResolveShortcut(false, true, false) == ShortcutAction.StopRun);
     Check(!session.BeginRun() && !session.BeginRecording());
     Check(session.StopRun() && !session.StopRun());
     Check(session.BeginRecording() && session.PauseRecording());
-    Check(session.ResolveShortcut(true, false) == ShortcutAction.ResumeRecording);
+    Check(session.ResolveShortcut(true, false, true) == ShortcutAction.ResumeRecording);
     Check(!session.BeginRun() && session.BeginRecording());
-    Check(session.ResolveShortcut(true, false) == ShortcutAction.FinishRecording);
+    Check(session.ResolveShortcut(true, false, true) == ShortcutAction.FinishRecording);
     Check(session.FinishRecording() && session.Mode == "ready");
 }
 
