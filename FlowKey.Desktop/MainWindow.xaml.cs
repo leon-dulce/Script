@@ -17,7 +17,6 @@ public partial class MainWindow : Window
     private readonly ScriptCatalog _catalog;
     private readonly DispatcherTimer _focusTimer = new() { Interval = TimeSpan.FromMilliseconds(100) };
     private readonly Native.HookCallback _keyboardCallback;
-    private readonly Native.HookCallback _mouseCallback;
     private readonly List<WindowInfo> _windows = [];
     private readonly StepRecorder _recorder = new();
     private readonly Queue<(ScriptStep Step, long Tick)> _recordedInputs = new();
@@ -27,16 +26,15 @@ public partial class MainWindow : Window
     private ScriptDocument? _executionScript;
     private string _workspace = "editor";
     private string _recordingHotkey = "F10";
-    private string _recordingTargetTitle = "";
     private bool _namingRequired, _inputDrainScheduled;
     private string _namingError = "";
     private IReadOnlyList<ScriptDocument> _savedScripts = [];
     private WindowInfo? _target;
-    private nint _handle, _keyboardHook, _mouseHook;
+    private nint _handle, _keyboardHook;
     private int _hotkeyCode = 121;
     private string? _registeredHotkey;
     private string _mode => _session.Mode;
-    private string _message = "请选择目标窗口。";
+    private string _message = "设置快捷键后即可开始录制。";
     private int _currentStep = -1;
     private long _currentIteration;
     private CancellationTokenSource? _playback;
@@ -53,7 +51,6 @@ public partial class MainWindow : Window
         _catalog = new ScriptCatalog(Path.Combine(_dataDirectory, "scripts"));
         InitializeComponent();
         _keyboardCallback = OnKeyboard;
-        _mouseCallback = OnMouse;
         Loaded += OnLoaded;
         Closing += OnClosing;
         Closed += OnClosed;
@@ -71,10 +68,9 @@ public partial class MainWindow : Window
             RefreshCatalog();
             _executionScript = migrated ?? _savedScripts.FirstOrDefault();
             _recordingHotkey = _executionScript?.Hotkey ?? "F10";
-            _recordingTargetTitle = _executionScript?.TargetTitle ?? "";
             _script.Hotkey = _recordingHotkey;
             if (!_message.StartsWith("有 ", StringComparison.Ordinal))
-                _message = $"设置目标窗口名称后，切到该窗口按 {_recordingHotkey} 开始录制；再次按下结束并命名保存。";
+                _message = $"按 {_recordingHotkey} 或点击「开始录制」开始；再次按下结束并命名保存。";
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException)
         { _message = $"载入脚本库失败：{error.Message}"; }
@@ -140,11 +136,7 @@ public partial class MainWindow : Window
             if (_mode == "ready")
             {
                 _pendingRecord = _pendingRun = false;
-                if (_workspace == "editor")
-                {
-                    if (!ConfirmRecordingTarget()) { Publish(); return 0; }
-                }
-                else ConfirmForegroundTarget();
+                if (_workspace == "execution") ConfirmForegroundTarget();
             }
             switch (_session.ResolveShortcut(_target is not null, _script.Steps.Count > 0, _workspace == "editor"))
             {
@@ -178,22 +170,6 @@ public partial class MainWindow : Window
         return _target is not null;
     }
 
-    private bool ConfirmRecordingTarget()
-    {
-        if (_recordingTargetTitle.Length == 0)
-        {
-            _message = "请先设置要录制的窗口名称。";
-            return false;
-        }
-        if (!ConfirmForegroundTarget() || !string.Equals(_target!.Value.Title, _recordingTargetTitle, StringComparison.OrdinalIgnoreCase))
-        {
-            _target = null;
-            _message = $"当前窗口与「{_recordingTargetTitle}」不符，请切到指定窗口后按 {_recordingHotkey}。";
-            return false;
-        }
-        return true;
-    }
-
     private bool RegisterShortcut(string hotkey)
     {
         var code = 0x70 + int.Parse(hotkey[1..]) - 1;
@@ -217,7 +193,6 @@ public partial class MainWindow : Window
         _windows.AddRange(Native.ListWindows(_handle));
         if (_target is { } target && !Native.Matches(target))
         {
-            if (_mode == "recording") PauseRecording("目标窗口已关闭，录制已暂停。");
             if (_mode == "running") StopRun("目标窗口已关闭，已停止执行。");
             _target = null;
             _pendingRecord = false;
@@ -234,7 +209,7 @@ public partial class MainWindow : Window
             mode = _mode, workspace = _workspace, message = _message, currentStep = _currentStep,
             currentIteration = _currentIteration, waitingForNextRun = _waitingForNextRun,
             pendingRecord = _pendingRecord, pendingRun = _pendingRun, dirty = _dirty,
-            recordingTargetTitle = _recordingTargetTitle, namingRequired = _namingRequired, namingError = _namingError,
+            namingRequired = _namingRequired, namingError = _namingError,
             selectedId = _target?.Handle.ToString() ?? "",
             windows = _windows.Select(w => new { id = w.Handle.ToString(), title = w.Title, process = w.ProcessName }),
             savedScripts = _savedScripts.Select(s => new { id = s.Id, name = s.Name, stepCount = s.Steps.Count, mode = s.Execution.Mode.ToString() }),
@@ -260,7 +235,6 @@ public partial class MainWindow : Window
             switch (action)
             {
                 case "refresh": RefreshWindows(); break;
-                case "recordingTarget": SetRecordingTarget(root.GetProperty("value").GetString()); break;
                 case "saveRecording": SaveRecording(root.GetProperty("name").GetString()); break;
                 case "discardRecording": DiscardRecording(); break;
                 case "workspace": SetWorkspace(root.GetProperty("value").GetString()); break;
@@ -288,7 +262,7 @@ public partial class MainWindow : Window
                 case "name": if (_mode == "ready" && _workspace == "editor") { SetName(root); AutoSaveEdits(); } break;
                 case "execution": if (_mode == "ready") SetExecution(root); break;
                 case "record": ToggleRecording(); break;
-                case "pause": PauseRecording("录制已暂停，返回目标窗口后可继续。"); break;
+                case "pause": break;
                 case "finish": FinishRecording(); break;
                 case "run": RequestRun(); break;
                 case "delete": if (_mode == "ready" && _workspace == "editor") { _script.Steps.RemoveAt(root.GetProperty("index").GetInt32()); _dirty = true; AutoSaveEdits(); } break;
@@ -308,17 +282,6 @@ public partial class MainWindow : Window
         _pendingRecord = false;
         _pendingRun = false;
         _message = _target is null ? "所选窗口不可用，请刷新列表后重选。" : $"已确认目标窗口：{_target.Value.Title}。";
-    }
-
-    private void SetRecordingTarget(string? title)
-    {
-        if (_mode != "ready" || _workspace != "editor" || _namingRequired) return;
-        var value = title?.Trim() ?? "";
-        if (value.Length > 512) throw new InvalidOperationException();
-        _recordingTargetTitle = value;
-        _target = null;
-        _pendingRecord = false;
-        _message = value.Length == 0 ? "请设置要录制的窗口名称。" : $"已指定「{value}」，切到该窗口按 {_recordingHotkey} 开始录制。";
     }
 
     private void SetWorkspace(string? workspace)
@@ -343,7 +306,7 @@ public partial class MainWindow : Window
             }
             _script = _recordingDraft;
             if (RegisterShortcut(_recordingHotkey))
-                _message = $"设置目标窗口名称，切到指定窗口按 {_recordingHotkey} 开始录制；再次按下结束并命名。";
+                _message = $"设置快捷键后，按 {_recordingHotkey} 开始录制；再次按下结束并命名。";
         }
         else
         {
@@ -445,8 +408,8 @@ public partial class MainWindow : Window
         var text = root.GetProperty("value").GetString() ?? "";
         if (text.Length is < 1 or > 10000) throw new InvalidOperationException();
         var index = root.TryGetProperty("index", out var element) ? element.GetInt32() : -1;
-        if (index < 0) _script.Steps.Add(new ScriptStep { Type = StepType.Text, Text = text, DelayMs = 500 });
-        else if (_script.Steps[index].Type == StepType.Text) _script.Steps[index].Text = text;
+        if (index < 0 || index >= _script.Steps.Count) return;
+        if (_script.Steps[index].Type == StepType.Text) _script.Steps[index].Text = text;
         _dirty = true;
     }
 
@@ -454,11 +417,11 @@ public partial class MainWindow : Window
     {
         if (_workspace != "editor" || _namingRequired) return;
         if (_mode is "recording" or "paused") { FinishRecording(); return; }
-        if (_mode != "ready" || !ConfirmRecordingTarget() || _target is not { } target) return;
-        StartRecording(target);
+        if (_mode != "ready") return;
+        StartRecording();
     }
 
-    private void StartRecording(WindowInfo target)
+    private void StartRecording()
     {
         _pendingRecord = false;
         if (_mode == "ready")
@@ -472,20 +435,17 @@ public partial class MainWindow : Window
             {
                 Name = "",
                 Hotkey = _recordingHotkey,
-                TargetTitle = target.Title,
-                TargetProcessPath = target.ProcessPath,
-                ClientWidth = target.Width,
-                ClientHeight = target.Height
+                GlobalKeyboardRecording = true
             };
             _recordingDraft = _script;
             _dirty = true;
         }
+        _target = null;
         _recordedInputs.Clear();
         _inputDrainScheduled = false;
         var module = Native.GetModuleHandle(null);
         _keyboardHook = Native.SetWindowsHookEx(Native.KeyboardHook, _keyboardCallback, module, 0);
-        _mouseHook = Native.SetWindowsHookEx(Native.MouseHook, _mouseCallback, module, 0);
-        if (_keyboardHook == 0 || _mouseHook == 0)
+        if (_keyboardHook == 0)
         {
             StopHooks(); _session.FinishRecording(); _message = "无法启用输入监听。"; return;
         }
@@ -548,20 +508,12 @@ public partial class MainWindow : Window
         _namingRequired = false;
         _namingError = "";
         _dirty = false;
-        _message = "已放弃本次录制。目标窗口与快捷键设置已保留。";
-    }
-
-    private void PauseRecording(string message)
-    {
-        if (_mode != "recording") return;
-        DrainRecordedInputs();
-        StopHooks(); _session.PauseRecording(); _message = message; Publish();
+        _message = "已放弃本次录制。快捷键设置已保留。";
     }
 
     private void StopHooks()
     {
         if (_keyboardHook != 0) { Native.UnhookWindowsHookEx(_keyboardHook); _keyboardHook = 0; }
-        if (_mouseHook != 0) { Native.UnhookWindowsHookEx(_mouseHook); _mouseHook = 0; }
     }
 
     private nint OnKeyboard(int code, nint wParam, nint lParam)
@@ -581,29 +533,6 @@ public partial class MainWindow : Window
         return Native.CallNextHookEx(_keyboardHook, code, wParam, lParam);
     }
 
-    private nint OnMouse(int code, nint wParam, nint lParam)
-    {
-        if (code >= 0 && _mode == "recording" && wParam is Native.LeftDown or Native.RightDown or Native.MiddleDown or Native.Wheel)
-        {
-            var data = Marshal.PtrToStructure<Native.MouseData>(lParam);
-            if ((data.Flags & Native.InjectedMouse) == 0)
-            {
-                var tick = Stopwatch.GetTimestamp();
-                var point = data.Point;
-                var button = wParam == Native.RightDown ? "Right" : wParam == Native.MiddleDown ? "Middle" : "Left";
-                var wheel = unchecked((short)(data.MouseInfo >> 16));
-                if (_target is { } target)
-                {
-                    Native.ScreenToClient(target.Handle, ref point);
-                    QueueRecordedStep(wParam == Native.Wheel
-                        ? new ScriptStep { Type = StepType.Scroll, X = point.X, Y = point.Y, WheelDelta = wheel }
-                        : new ScriptStep { Type = StepType.Click, X = point.X, Y = point.Y, Button = button }, tick);
-                }
-            }
-        }
-        return Native.CallNextHookEx(_mouseHook, code, wParam, lParam);
-    }
-
     private void AddRecordedStep(ScriptStep step, long tick)
     {
         QueueRecordedStep(step, tick);
@@ -612,9 +541,7 @@ public partial class MainWindow : Window
 
     private void QueueRecordedStep(ScriptStep step, long tick)
     {
-        if (_mode != "recording" || _target is not { } target || !IsTargetReady(target)) return;
-        if (step.Type is StepType.Click or StepType.Scroll &&
-            (step.X < 0 || step.Y < 0 || step.X >= target.Width || step.Y >= target.Height)) return;
+        if (_mode != "recording") return;
         _recordedInputs.Enqueue((step, tick));
         if (_inputDrainScheduled) return;
         _inputDrainScheduled = true;
@@ -643,7 +570,6 @@ public partial class MainWindow : Window
             { _pendingRun = false; _message = "目标窗口已关闭或尺寸变化，取消等待执行。"; Publish(); }
             else if (IsTargetReady(target)) { _pendingRun = false; StartRun(); }
         }
-        if (_mode == "recording" && !IsTargetReady(target)) PauseRecording("目标窗口失焦、关闭或尺寸变化，录制已暂停。");
         if (_mode == "running" && !IsTargetReady(target)) StopRun("目标窗口失焦、关闭或尺寸变化，已停止执行。");
     }
 
@@ -674,8 +600,8 @@ public partial class MainWindow : Window
     private string? RunPreflight(WindowInfo target)
     {
         if (!Native.Matches(target) || !Native.SameSize(target)) return "目标窗口已关闭或尺寸变化。";
-        if (_script.ClientWidth != target.Width || _script.ClientHeight != target.Height ||
-            (_script.TargetProcessPath.Length > 0 && !string.Equals(_script.TargetProcessPath, target.ProcessPath, StringComparison.OrdinalIgnoreCase)))
+        if (!_script.GlobalKeyboardRecording && (_script.ClientWidth != target.Width || _script.ClientHeight != target.Height ||
+            (_script.TargetProcessPath.Length > 0 && !string.Equals(_script.TargetProcessPath, target.ProcessPath, StringComparison.OrdinalIgnoreCase))))
             return "目标程序或窗口尺寸与脚本不符。";
         try { ScriptValidator.Validate(_script); }
         catch (InvalidDataException error) { return error.Message; }

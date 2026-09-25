@@ -69,35 +69,20 @@ internal static class DesktopE2E
             var catalog = new ScriptCatalog(Path.Combine(root, "scripts"));
             if (EvalBool(app, "!document.getElementById('sidebar-library').hidden"))
                 throw new Exception("Saved scripts must be hidden in the recording workspace.");
-            if (!EvalBool(app, "['load-button','save-button','new-editor-script','window-select','record-button','finish-button'].every(id=>!document.getElementById(id)||document.getElementById(id).hidden) && document.getElementById('run-button').hidden && document.getElementById('recording-progress').hidden"))
+            if (!EvalBool(app, "['load-button','save-button','new-editor-script','window-select','recording-target-config','recording-window-card','add-text','finish-button'].every(id=>!document.getElementById(id)||document.getElementById(id).hidden) && document.getElementById('run-button').hidden && document.getElementById('recording-progress').hidden"))
                 throw new Exception("Recording still exposes removed manual recording, save, reload, window-picker, execution-navigation, or progress controls.");
-            if (!EvalBool(app, "!document.getElementById('recording-window-title').hidden"))
-                throw new Exception("The recording target-title input is unavailable.");
+            if (!EvalBool(app, "!document.getElementById('record-button').hidden && !document.getElementById('record-button').disabled"))
+                throw new Exception("Start recording button unavailable.");
             Eval(app, "document.getElementById('nav-execution').click()");
             Until(() => EvalBool(app, "!document.getElementById('execution-view').hidden && document.getElementById('execution-start').disabled"),
                 "empty execution library must disable playback");
             Eval(app, "document.getElementById('nav-editor').click()");
             Until(() => EvalBool(app, "!document.getElementById('workspace-view').hidden"), "recording workspace did not open");
 
-            SetRecordingTarget(app, "");
-            ActivateTarget(target, editor);
-            PressHotkey(hotkey);
-            PumpFor(150);
-            AssertNotRecording(app, catalog, "A recording began without a configured target title.");
-            SetRecordingTarget(app, targetName + " missing");
-            ActivateTarget(target, editor);
-            PressHotkey(hotkey);
-            PumpFor(150);
-            AssertNotRecording(app, catalog, "A recording began in a window whose title did not match.");
-            SetRecordingTarget(app, targetName);
             ActivateWindow(app);
-            PressShortcutInWindow(hotkey, new WindowInteropHelper(app).Handle);
-            PumpFor(150);
-            AssertNotRecording(app, catalog, "A recording began while the configured window was not foreground.");
+            Eval(app, "document.getElementById('record-button').click()");
+            Until(() => Text(app, "status-text") == "正在录制", "button did not start global recording");
             ActivateTarget(target, editor);
-            PressHotkey(hotkey);
-            Until(() => Text(app, "status-text") == "正在录制" && Text(app, "window-name") == targetName,
-                "hotkey did not start recording in the configured foreground window");
             AddTestRecordedText(app, "X");
             AddTestRecordedText(app, "Y");
             var firstId = CurrentScript(app).Id;
@@ -123,8 +108,6 @@ internal static class DesktopE2E
             WaitForNamedSave(app, catalog, firstId, "E2E XY", 1);
             Eval(app, "document.getElementById('nav-editor').click()");
             Until(() => EvalBool(app, "!document.getElementById('workspace-view').hidden"), "saved recording did not reopen for editing");
-            if (EvalString(app, "document.getElementById('recording-window-title').value") != targetName)
-                throw new Exception("Recording target-title configuration was lost across navigation.");
             SetRecordedDelay(app, 0, 400);
             SetRecordedDelay(app, 1, 700);
             Until(() => catalog.Load(firstId)!.Steps.Select(s => s.DelayMs).SequenceEqual([400, 700]),
@@ -137,8 +120,13 @@ internal static class DesktopE2E
             PumpFor(100);
             EmitKeyboardCallback(app, 0x5A);
             PumpFor(90);
+            ActivateWindow(app);
+            if (Text(app, "status-text") != "正在录制") throw new Exception("Switching to app paused recording.");
             EmitKeyboardCallback(app, 0x5A);
             PumpFor(90);
+            ActivateTarget(target, editor);
+            target.Width += 30;
+            PumpFor(150);
             EmitKeyboardCallback(app, 0x5A, keyUp: true);
             var otherFunctionKey = ChooseReplayFunctionKey(app, hotkey);
             EmitKeyboardCallback(app, otherFunctionKey);
@@ -161,9 +149,9 @@ internal static class DesktopE2E
                 throw new Exception("The live recording screen did not display each down/up action with its exact recorded interval.");
             var secondId = CurrentScript(app).Id;
             ActivateWindow(app);
-            Until(() => Text(app, "status-text") == "录制已暂停", "recording did not pause when its target lost focus");
-            ActivateTarget(target, editor);
-            PressHotkey(hotkey);
+            PumpFor(150);
+            if (Text(app, "status-text") != "正在录制") throw new Exception("Global recording paused on focus change.");
+            PressShortcutInWindow(hotkey, new WindowInteropHelper(app).Handle);
             WaitForNaming(app);
             if (catalog.List().Scripts.Count != 1) throw new Exception("Paused recording saved without naming confirmation.");
             ConfirmRecordingName(app, "E2E keys");
@@ -180,6 +168,8 @@ internal static class DesktopE2E
             Until(() => EvalBool(app, "!document.getElementById('workspace-view').hidden") &&
                 CurrentScript(app).Execution.RepeatCount == 2 && CurrentScript(app).Hotkey == hotkey,
                 "recording workspace restored stale execution settings or hotkey for its saved script");
+            Post(app, "{action:'text',value:'must not append to saved recording'}");
+            if (CurrentScript(app).Steps.Count != 5) throw new Exception("Saved recording accepted a new text step.");
             SetRecordedDelay(app, 0, 150);
             Until(() => catalog.Load(secondId)!.Steps[0].DelayMs == 150 && catalog.Load(secondId)!.Hotkey == hotkey,
                 "editing the recording overwrote its automatically saved execution hotkey");
@@ -187,7 +177,7 @@ internal static class DesktopE2E
             ActivateTarget(target, editor);
             PressHotkey(hotkey);
             Until(() => Text(app, "status-text") == "正在录制", "empty recording did not start");
-            PressHotkey(hotkey);
+            Eval(app, "document.getElementById('record-button').click()");
             Until(() => Text(app, "status-text") == "就绪，等待操作", "empty recording did not finish");
             if (catalog.List().Scripts.Count != 2 || EvalBool(app, "document.getElementById('recording-name-dialog').open"))
                 throw new Exception("An empty recording created a saved script or requested a name.");
@@ -197,7 +187,7 @@ internal static class DesktopE2E
             if (CurrentScript(app).Steps.Count != 0 || catalog.List().Scripts.Count != 2 ||
                 EvalBool(app, "document.getElementById('recording-name-dialog').open"))
                 throw new Exception("A text action appended to or saved an empty unsaved recording.");
-            Console.WriteLine("PASS Windows UI: target-title validation, real hotkey start/finish, required naming, independent recordings, paused finish, and empty recording; key events seeded through physical-like hook callbacks");
+            Console.WriteLine("PASS Windows UI: global button start, real hotkey start/finish, required naming, independent recordings, cross-window recording and finish, and empty recording; key events seeded through physical-like hook callbacks");
 
             Eval(app, "document.getElementById('nav-execution').click()");
             Until(() => EvalBool(app, "!document.getElementById('execution-view').hidden && !document.getElementById('sidebar-library').hidden && document.querySelectorAll('.saved-script').length===2"),
@@ -297,25 +287,27 @@ internal static class DesktopE2E
             hotkey = catalog.Load(firstId)!.Hotkey;
             SetPlan(app, "Once", 2, 250);
             var beforeMismatch = editor.Text;
-            var width = target.Width;
             target.Width += 100;
             ActivateTarget(target, editor);
             PressHotkey(hotkey);
-            Until(() => Text(app, "execution-message").Contains("尺寸与脚本不符"), "mismatched target dimensions were not rejected");
-            PumpFor(300);
-            if (editor.Text != beforeMismatch) throw new Exception("Replay sent input to an incompatible target window.");
-            target.Width = width;
-            ActivateTarget(target, editor);
-            PressHotkey(hotkey);
-            Until(() => editor.Text == beforeMismatch + "XY", "selected saved script did not execute by foreground shortcut");
+            Until(() => editor.Text == beforeMismatch + "XY", "global script could not replay in resized window");
             Until(() => Text(app, "status-text") == "就绪，等待操作", "selected script did not finish");
+            if (!catalog.Load(firstId)!.GlobalKeyboardRecording || !catalog.Load(secondId)!.GlobalKeyboardRecording)
+                throw new Exception("Global recording scope was not saved.");
+            var current = CurrentScript(app);
+            current.GlobalKeyboardRecording = false;
+            var windowInfo = Native.ListWindows(new WindowInteropHelper(app).Handle).Single(w => w.Handle == _keyboardTarget);
+            var preflight = typeof(MainWindow).GetMethod("RunPreflight", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            if (preflight.Invoke(app, [windowInfo]) is not string error || !error.Contains("尺寸与脚本不符"))
+                throw new Exception("Legacy target-bound scripts lost dimension validation.");
+            current.GlobalKeyboardRecording = true;
             Eval(app, "document.getElementById('nav-editor').click()");
             Until(() => EvalBool(app, "!document.getElementById('workspace-view').hidden"), "recording navigation failed");
             if (EvalBool(app, "!document.getElementById('sidebar-library').hidden"))
                 throw new Exception("Saved scripts remained visible in the recording workspace.");
             if (!EvalBool(app, "document.getElementById('run-button').hidden && document.getElementById('recording-progress').hidden"))
                 throw new Exception("Removed execution-navigation or progress controls reappeared on return to recording.");
-            Console.WriteLine("PASS Windows UI: library selection, shortcut target capture, target-size failure, and separate recording workspace");
+            Console.WriteLine("PASS Windows UI: library selection, shortcut target capture, global resized-window replay and legacy size validation, and separate recording workspace");
 
             hotkey = CurrentScript(app).Hotkey;
             ActivateTarget(target, editor);
@@ -403,9 +395,18 @@ internal static class DesktopE2E
                 throw new Exception("Closing playback emitted extra key events or ran subsequent steps.");
             Console.WriteLine("PASS Windows UI: closing during held-key replay releases keys synchronously and delivers Windows key-up");
         }
+        catch (Exception error)
+        {
+            Console.WriteLine("FAIL Windows UI: " + error);
+            throw;
+        }
         finally
         {
             _keyboardTarget = 0;
+            typeof(MainWindow).GetMethod("StopHooks", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(app, null);
+            var session = (SessionState)typeof(MainWindow).GetField("_session", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(app)!;
+            session.FinishRecording();
+            typeof(MainWindow).GetField("_namingRequired", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(app, false);
             if (app.IsVisible) app.Close();
             if (target.IsVisible) target.Close();
             application.Shutdown();
@@ -477,21 +478,6 @@ internal static class DesktopE2E
     private static ScriptDocument CurrentScript(MainWindow app) =>
         (ScriptDocument)typeof(MainWindow).GetField("_script", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(app)!;
 
-    private static void SetRecordingTarget(MainWindow app, string title)
-    {
-        Eval(app, "document.getElementById('recording-window-title').value=" + JsonSerializer.Serialize(title) +
-            ";document.getElementById('recording-window-title').dispatchEvent(new Event('change'))");
-        PumpFor(80);
-        if (EvalString(app, "document.getElementById('recording-window-title').value") != title)
-            throw new Exception("Recording target title did not update.");
-    }
-
-    private static void AssertNotRecording(MainWindow app, ScriptCatalog catalog, string error)
-    {
-        if (Text(app, "status-text") != "就绪，等待操作" || CurrentScript(app).Steps.Count != 0 || catalog.List().Scripts.Count != 0)
-            throw new Exception(error);
-    }
-
     private static void WaitForNaming(MainWindow app) => Until(() =>
         Text(app, "status-text").Contains("命名") && EvalBool(app, "document.getElementById('recording-name-dialog').open"),
         "finishing a nonempty recording did not open its naming dialog");
@@ -507,8 +493,9 @@ internal static class DesktopE2E
 
     private static void EmitKeyboardCallback(MainWindow app, uint key, bool keyUp = false, uint flags = 0)
     {
-        if (Native.GetForegroundWindow() != _keyboardTarget)
-            throw new DesktopUnavailableException("test target lost focus before the synthetic physical-like keyboard callback");
+        Native.GetWindowThreadProcessId(Native.GetForegroundWindow(), out var foregroundProcess);
+        if (foregroundProcess != Environment.ProcessId)
+            throw new DesktopUnavailableException("test-owned window lost focus before the synthetic physical-like keyboard callback");
         // SendInput events carry an injected flag and must be rejected by recording. Exercise
         // the production hook callback with explicit physical-like key data; this does not
         // claim a hardware-origin key event. Global shortcuts and playback still use Windows.
@@ -586,23 +573,24 @@ internal static class DesktopE2E
         var handle = new WindowInteropHelper(target).Handle;
         Native.GetWindowThreadProcessId(handle, out var processId);
         if (handle == 0 || handle != _keyboardTarget || processId != Environment.ProcessId ||
-            !ReferenceEquals(target.Content, editor) || editor.Text.Length != 0) return false;
+            !ReferenceEquals(target.Content, editor) || editor.Text.Length != 0) { Console.WriteLine($"Focus setup: handle={handle}, expected={_keyboardTarget}, pid={processId}/{Environment.ProcessId}, text={editor.Text.Length}"); return false; }
         var hadCursor = GetCursorPos(out var originalCursor);
         var wasTopmost = target.Topmost;
         target.Topmost = true;
         try
         {
             PumpFor(100);
-            if (!Native.GetClientRect(handle, out var rect) || rect.Width <= 0 || rect.Height <= 0) return false;
+            if (!Native.GetClientRect(handle, out var rect) || rect.Width <= 0 || rect.Height <= 0) { Console.WriteLine("Focus setup: no client area"); return false; }
             var point = new Native.Point { X = rect.Width / 2, Y = rect.Height / 2 };
-            if (!Native.ClientToScreen(handle, ref point) || !PointBelongsToTestTarget(point, handle)) return false;
-            if (!Native.SetCursorPos(point.X, point.Y) || !PointBelongsToTestTarget(point, handle)) return false;
+            if (!Native.ClientToScreen(handle, ref point) || !PointBelongsToTestTarget(point, handle)) { Console.WriteLine($"Focus acquisition: test point {point.X},{point.Y} is covered by another window."); return false; }
+            if (!Native.SetCursorPos(point.X, point.Y) || !PointBelongsToTestTarget(point, handle)) { Console.WriteLine("Focus setup: cursor unavailable or point covered"); return false; }
             try { Native.SendMouse(0x0002); }
             finally { Native.SendMouse(0x0004); }
             PumpFor(150);
+            Console.WriteLine($"Focus acquisition: foreground={Native.GetForegroundWindow()}, expected={handle}");
             return Native.GetForegroundWindow() == handle;
         }
-        catch (System.ComponentModel.Win32Exception) { return false; }
+        catch (System.ComponentModel.Win32Exception error) { Console.WriteLine(error.Message); return false; }
         finally
         {
             if (hadCursor) Native.SetCursorPos(originalCursor.X, originalCursor.Y);
@@ -620,17 +608,17 @@ internal static class DesktopE2E
 
     private static void WaitForInitialTargetFocus(Window target)
     {
-        Console.WriteLine("WAIT Windows UI: click the input area in '" + target.Title + "' within 45 seconds to allow the desktop test to begin.");
+        Console.WriteLine("WAIT Windows UI: click the input area in '" + target.Title + "' within 120 seconds to allow the desktop test to begin.");
         var handle = new WindowInteropHelper(target).Handle;
         var watch = Stopwatch.StartNew();
         target.Topmost = true;
         try
         {
             target.Activate();
-            Until(() => Native.GetForegroundWindow() == handle || watch.ElapsedMilliseconds >= 45000,
+            Until(() => Native.GetForegroundWindow() == handle || watch.ElapsedMilliseconds >= 120000,
                 "initial manual-focus wait did not finish", 47000);
             if (Native.GetForegroundWindow() != handle)
-                throw new DesktopUnavailableException("initial manual focus timed out after 45 seconds; no test input was sent");
+                throw new DesktopUnavailableException("initial manual focus timed out after 120 seconds; no test input was sent");
         }
         finally { target.Topmost = false; }
     }

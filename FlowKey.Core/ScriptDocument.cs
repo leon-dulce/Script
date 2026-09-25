@@ -12,6 +12,7 @@ public sealed class ScriptDocument
     [JsonRequired] public string Hotkey { get; set; } = "F10";
     [JsonRequired] public int ClientWidth { get; set; }
     [JsonRequired] public int ClientHeight { get; set; }
+    public bool GlobalKeyboardRecording { get; set; }
     public ExecutionPlan Execution { get; set; } = new();
     [JsonRequired] public List<ScriptStep> Steps { get; set; } = [];
 }

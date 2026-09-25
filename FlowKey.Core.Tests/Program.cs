@@ -3,6 +3,7 @@ using FlowKey.Core;
 var checks = new (string Name, Action Run)[]
 {
     ("round trip saves all step types", RoundTrip),
+    ("global keyboard scope persists and rejects coordinate steps", GlobalRecordingScope),
     ("rejects unsafe script values", RejectsInvalid),
     ("corrupt file reports an error", CorruptFile),
     ("invalid save preserves old file", InvalidSavePreservesFile),
@@ -34,6 +35,29 @@ static ScriptDocument ValidScript() => new()
         new() { Type = StepType.Text, Text = "中文" }
     ]
 };
+
+static void GlobalRecordingScope()
+{
+    var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".json");
+    try
+    {
+        var store = new ScriptStore(path);
+        var script = new ScriptDocument { GlobalKeyboardRecording = true, Steps = [new() { Type = StepType.Key, Keys = [65], KeyAction = KeyAction.Down }] };
+        store.Save(script);
+        Check(store.Load()!.GlobalKeyboardRecording && store.Load()!.ClientWidth == 0);
+        var json = File.ReadAllText(path);
+        var legacy = System.Text.RegularExpressions.Regex.Replace(json, "\"globalKeyboardRecording\"\\s*:\\s*true,?", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        File.WriteAllText(path, legacy);
+        Check(!store.Load()!.GlobalKeyboardRecording);
+        script.ClientWidth = script.ClientHeight = 100;
+        foreach (var type in new[] { StepType.Click, StepType.DoubleClick, StepType.Scroll })
+        {
+            script.Steps = [new() { Type = type, WheelDelta = 120 }];
+            Throws(() => ScriptValidator.Validate(script));
+        }
+    }
+    finally { File.Delete(path); }
+}
 
 static void RoundTrip()
 {
@@ -303,9 +327,10 @@ static void KeyActionValidation()
 static void SessionTransitions()
 {
     var session = new SessionState();
-    Check(session.ResolveShortcut(false, false, true) == ShortcutAction.SelectTarget);
+    Check(session.ResolveShortcut(false, false, true) == ShortcutAction.StartRecording);
     Check(session.ResolveShortcut(true, false, true) == ShortcutAction.StartRecording);
     Check(session.ResolveShortcut(true, true, true) == ShortcutAction.StartRecording);
+    Check(session.ResolveShortcut(false, true, true) == ShortcutAction.StartRecording);
     Check(session.ResolveShortcut(true, true, false) == ShortcutAction.StartRun);
     Check(session.ResolveShortcut(true, false, false) == ShortcutAction.SelectScript);
     Check(session.ResolveShortcut(false, false, false) == ShortcutAction.SelectScript);

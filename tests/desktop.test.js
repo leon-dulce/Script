@@ -99,63 +99,32 @@ function descendants(element) {
   return element.children.flatMap(child => [child, ...descendants(child)]);
 }
 
-test('recording configures exact window title and shortcut without manual start or finish buttons', () => {
+test('global recording starts without a target and has no target or add-text controls', () => {
   const { get, select, sent, state, push } = desktop();
-  assert.equal(sent[0].action, 'refresh');
-  push(state({ selectedId: '', recordingTargetTitle: '', script: { ...state().script, clientWidth: 0, clientHeight: 0, steps: [] } }));
-  for (const id of ['load-button', 'save-button', 'new-editor-script', 'pause-button', 'window-select',
-    'refresh-windows', 'script-name-row', 'open-execution', 'plan-summary', 'run-button',
-    'recording-progress', 'record-button', 'finish-button']) assert.equal(get(id).hidden, true, id);
-  assert.equal(get('sidebar-library').hidden, true);
-  assert.equal(get('recording-target-config').hidden, false);
-  assert.equal(get('add-text').disabled, true);
-  assert.match(get('window-name').textContent, /先设置窗口名称/);
-  assert.match(select('.help').textContent, /先设置完整窗口名称/);
+  push(state({ selectedId: '', windows: [], script: { ...state().script, steps: [], clientWidth: 0, clientHeight: 0 } }));
+  for (const id of ['recording-target-config', 'recording-window-card', 'add-text', 'run-button', 'recording-progress']) assert.equal(get(id).hidden, true);
+  assert.equal(get('record-button').hidden, false);
+  assert.equal(get('record-button').disabled, false);
+  assert.match(select('.help').textContent, /切换窗口会继续记录/);
   get('hotkey-select').change('F9');
   assert.equal(sent.at(-1).action, 'hotkey');
-  assert.equal(sent.at(-1).value, 'F9');
-  get('recording-window-title').focus();
-  assert.equal(sent.at(-1).action, 'refresh');
-  get('recording-window-title').change('日报.txt — 记事本');
-  assert.equal(sent.at(-1).action, 'recordingTarget');
-  assert.equal(sent.at(-1).value, '日报.txt — 记事本');
-  push(state({ recordingTargetTitle: '日报.txt — 记事本', selectedId: '' }));
-  assert.match(select('.help').textContent, /「日报.txt — 记事本」按 F10/);
-  assert.match(select('.help').textContent, /命名并确认后/);
-  const messagesBeforeLegacyClick = sent.length;
   get('record-button').click();
-  get('finish-button').click();
-  get('run-button').click();
-  assert.equal(sent.length, messagesBeforeLegacyClick, 'removed controls have no desktop handlers');
-  get('nav-execution').click();
-  assert.equal(sent.at(-1).action, 'workspace');
-  assert.equal(sent.at(-1).value, 'execution');
+  assert.equal(sent.at(-1).action, 'record');
 });
 
-test('recording target suggestions refresh without replacing active title input and show configuration failures', () => {
+test('recording button stops a live recording but is blocked during naming and execution', () => {
   const { get, sent, state, push } = desktop();
-  push(state({ windows: [
-    { id: '1', title: '记事本', process: 'notepad' },
-    { id: '2', title: '报告 — 表格', process: 'excel' },
-    { id: '3', title: '记事本', process: 'notepad' }
-  ] }));
-  assert.equal(get('recording-window-options').children.length, 2);
-  assert.equal(get('recording-window-options').children[1].value, '报告 — 表格');
-  get('recording-window-title').focus();
-  get('recording-window-title').value = '正在输入的标题';
-  push(state());
-  assert.equal(get('recording-window-title').value, '正在输入的标题');
-  get('recording-window-title').change('');
-  assert.equal(sent.at(-1).action, 'recordingTarget');
-  assert.equal(sent.at(-1).value, '');
-  push(state({ recordingTargetTitle: '', selectedId: '', message: '请先设置要录制的窗口名称。' }));
-  assert.match(get('status-hint').textContent, /先设置/);
-  push(state({ mode: 'recording' }));
-  assert.equal(get('recording-window-title').disabled, true);
-  const before = sent.length;
-  get('recording-window-title').change('别的窗口');
-  get('recording-window-title').focus();
-  assert.equal(sent.length, before);
+  push(state({ mode: 'recording', selectedId: '', windows: [] }));
+  assert.equal(get('record-button').disabled, false);
+  assert.equal(get('record-button').querySelector('span').textContent, '停止录制');
+  get('record-button').click();
+  assert.equal(sent.at(-1).action, 'record');
+  for (const update of [{ namingRequired: true }, { workspace: 'execution', mode: 'running' }]) {
+    push(state(update));
+    const before = sent.length;
+    get('record-button').click();
+    assert.equal(sent.length, before);
+  }
 });
 
 test('an empty unsaved recording cannot add text even after its target dimensions were captured', () => {
@@ -166,7 +135,7 @@ test('an empty unsaved recording cannot add text even after its target dimension
   get('add-text').click();
   assert.equal(sent.length, before);
   push(state());
-  assert.equal(get('add-text').disabled, false, 'saved named scripts remain editable');
+  assert.equal(get('add-text').disabled, true, 'saved scripts cannot add text');
 });
 
 test('recording open-script and ready progress stay absent after updates and navigation', () => {
@@ -177,7 +146,7 @@ test('recording open-script and ready progress stay absent after updates and nav
     push(state(update));
     assert.equal(get('run-button').hidden, true);
     assert.equal(get('recording-progress').hidden, true);
-    assert.equal(get('record-button').hidden, true);
+    assert.equal(get('record-button').hidden, false);
     assert.equal(get('finish-button').hidden, true);
   }
   push(state({ workspace: 'execution', mode: 'running', currentStep: 0 }));
@@ -537,7 +506,7 @@ test('desktop markup has no manual save or new-script control in execution and i
   assert.match(html, /id="execution-current-action"/);
   assert.match(html, /id="mode-continuous"/);
   assert.match(html, /id="recording-window-title"[^>]+list="recording-window-options"/);
-  assert.match(html, /标题完全一致|窗口标题完全一致/);
+  assert.match(html, /id="recording-window-card"/);
   assert.match(html, /<dialog id="recording-name-dialog"/);
   assert.match(html, /id="recording-name-input"[^>]+maxlength="100"/);
   assert.doesNotMatch(html, /id="save-execution"|id="new-script"|只需三步/);

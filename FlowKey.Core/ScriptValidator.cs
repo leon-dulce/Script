@@ -26,6 +26,8 @@ public static class ScriptValidator
         {
             if (step is null || !Enum.IsDefined(step.Type) || !Enum.IsDefined(step.KeyAction) || step.DelayMs < 0)
                 throw new InvalidDataException("步骤类型或等待时间无效。");
+            if (script.GlobalKeyboardRecording && step.Type is StepType.Click or StepType.DoubleClick or StepType.Scroll)
+                throw new InvalidDataException("全域键盘脚本不能包含鼠标坐标步骤。");
             switch (step.Type)
             {
                 case StepType.Click or StepType.DoubleClick:

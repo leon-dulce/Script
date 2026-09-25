@@ -335,17 +335,6 @@
     });
     select.value = state.selectedId;
     select.disabled = state.mode !== 'ready';
-    const recordingTitle = state.recordingTargetTitle || '';
-    if (document.activeElement !== $('recording-window-title')) $('recording-window-title').value = recordingTitle;
-    $('recording-window-title').disabled = isBusy();
-    const titleOptions = $('recording-window-options');
-    titleOptions.replaceChildren(...[...new Set(state.windows.map(item => item.title))].map(title => {
-      const option = document.createElement('option');
-      option.value = title;
-      return option;
-    }));
-    $('window-name').textContent = selected ? selected.title : recordingTitle || '请先设置窗口名称';
-    document.querySelector('.window-meta small').textContent = selected ? `${selected.process} · 已确认` : recordingTitle ? '已配置，切到同名窗口按快捷键开始' : '仅录制标题完全一致的窗口';
     $('hotkey-select').value = state.script.hotkey;
     if (document.activeElement !== $('script-name')) $('script-name').value = state.script.name;
     $('script-name').disabled = state.mode !== 'ready';
@@ -355,13 +344,14 @@
     $('status-text').textContent = state.namingRequired ? '录制结束，等待命名保存' : ({ ready: '就绪，等待操作', recording: '正在录制', paused: '录制已暂停', running: '正在执行脚本' })[state.mode] || '错误';
     $('status-hint').textContent = state.message;
     $('status-dot').className = `pulse${state.mode === 'recording' ? ' recording' : state.mode === 'running' ? ' running' : ''}`;
-    $('add-text').disabled = isBusy() || !hasSavedScript() || !(state.script.clientWidth > 0 && state.script.clientHeight > 0);
+    $('add-text').disabled = true;
+    $('record-button').disabled = state.namingRequired || state.workspace !== 'editor' || state.mode === 'running';
+    $('record-button').querySelector('span').textContent = state.mode === 'recording' ? '停止录制' : '开始录制';
     document.querySelector('.help').textContent = state.mode === 'recording'
       ? `再次按 ${state.script.hotkey} 结束录制，然后为脚本命名并确认保存。`
       : state.namingRequired ? '录制已结束，请在对话框输入脚本名称并确认保存。'
         : state.mode === 'paused' ? `录制已暂停。按 ${state.script.hotkey} 结束，然后为脚本命名保存。`
-          : recordingTitle ? `切到「${recordingTitle}」按 ${state.script.hotkey} 开始，再按一次结束。命名并确认后，脚本才会加入脚本库。`
-            : '先设置完整窗口名称与快捷键，再切到指定窗口按快捷键开始录制。';
+          : `设置快捷键后，按 ${state.script.hotkey} 或点击「开始录制」。切换窗口会继续记录，再按一次结束并命名保存。`;
     $('step-count').textContent = `${state.script.steps.length} 个步骤`;
     renderSteps('steps', state.script.steps, true);
     renderLibrary();
@@ -379,28 +369,26 @@
   document.addEventListener('DOMContentLoaded', () => {
     for (const id of ['load-button', 'save-button', 'new-editor-script', 'pause-button', 'refresh-windows',
       'window-select', 'script-name-row', 'plan-summary', 'open-execution', 'add-step',
-      'run-button', 'recording-progress', 'record-button', 'finish-button']) $(id).hidden = true;
-    $('recording-target-config').hidden = false;
-    $('add-text').hidden = false;
-    $('recording-subtitle').textContent = '设置窗口名称与快捷键，在指定窗口开始及结束录制，命名后保存。';
-    $('recording-target-note').textContent = '仅在标题完全一致的窗口开始录制';
+      'run-button', 'recording-progress', 'finish-button', 'recording-target-config', 'recording-window-card', 'add-text']) $(id).hidden = true;
+    $('record-button').hidden = false;
+    $('target-title').textContent = '录制状态';
+    document.querySelector('.card-label').textContent = '01 / 状态';
+    $('recording-subtitle').textContent = '设置快捷键或点击开始录制，自由切换窗口，实时记录每个按键与间隔。';
+    $('recording-target-note').textContent = '跨窗口持续录制键盘动作';
     $('run-title').textContent = '录制快捷键';
     $('hotkey-select').setAttribute('aria-label', '设置录制开始与结束快捷键');
     $('recording-shortcut-note').textContent = '按一次开始，再按一次结束并命名';
     document.querySelector('.demo-badge').textContent = 'DESKTOP APP';
     document.querySelector('.sidebar-bottom').innerHTML = '<strong><span class="dot"></span>本地脚本库</strong>结束录制后，为脚本命名并确认保存，即可在执行页使用。';
     document.querySelector('.footer-note').textContent = '脚本仅在选定窗口位于前台且尺寸一致时执行。';
-    document.querySelector('.help').textContent = '设置窗口名称与快捷键，在指定窗口按一次开始，再按一次结束并命名保存。';
+    document.querySelector('.help').textContent = '按快捷键或开始录制按钮开始，再按一次结束并命名保存。';
     $('hotkey-select').replaceChildren(...['F8', 'F9', 'F10', 'F11'].map(key => {
       const option = document.createElement('option'); option.value = key; option.textContent = key; return option;
     }));
     $('execution-refresh-windows').addEventListener('click', () => send('refresh'));
     $('execution-window-select').addEventListener('change', event => send('select', { value: event.target.value }));
     $('hotkey-select').addEventListener('change', event => send('hotkey', { value: event.target.value }));
-    $('recording-window-title').addEventListener('change', event => {
-      if (!isBusy()) send('recordingTarget', { value: event.target.value });
-    });
-    $('recording-window-title').addEventListener('focus', () => { if (!isBusy()) send('refresh'); });
+    $('record-button').addEventListener('click', () => send('record'));
     $('execution-hotkey').addEventListener('change', event => send('hotkey', { value: event.target.value }));
     $('nav-editor').addEventListener('click', () => navigate('editor'));
     $('nav-execution').addEventListener('click', () => navigate('execution'));
@@ -418,10 +406,6 @@
     });
     $('recording-name-discard').addEventListener('click', () => {
       if (state?.namingRequired && window.confirm('确定放弃本次录制吗？本次录制的步骤将不会保存。')) send('discardRecording');
-    });
-    $('add-text').addEventListener('click', () => {
-      const value = window.prompt('输入回放时要写入的文字');
-      if (value) send('text', { value });
     });
     window.chrome.webview.addEventListener('message', event => { state = event.data; render(); });
     showView('editor');
