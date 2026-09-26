@@ -270,7 +270,7 @@ public partial class MainWindow : Window
                 sound = _flowPreferences.CompletionSound, dialog = _flowPreferences.CompletionDialog,
                 border = _flowPreferences.CompletionBorder, durationSeconds = _flowPreferences.CompletionDurationSeconds },
             currentIteration = _currentIteration, waitingForNextRun = _waitingForNextRun,
-            pendingRecord = _pendingRecord, pendingRun = _pendingRun, dirty = _dirty,
+            pendingRecord = _pendingRecord, pendingRun = _pendingRun, stopping = _playback is not null && _mode != "running", dirty = _dirty,
             switchingWindow = _pendingRun && _activationWait is not null,
             namingRequired = _namingRequired, namingError = _namingError,
             elevated = _elevated, recordingAccessWarning = _recordingAccessWarning,
@@ -347,6 +347,7 @@ public partial class MainWindow : Window
                 case "pause": break;
                 case "finish": FinishRecording(); break;
                 case "run": RequestRun(); break;
+                case "stop": StopRequested(); break;
                 case "delete": if (_mode == "ready" && _workspace == "editor") { _script.Steps.RemoveAt(root.GetProperty("index").GetInt32()); _dirty = true; AutoSaveEdits(); } break;
                 case "delay": if (_mode == "ready" && _workspace == "editor") { SetDelay(root); AutoSaveEdits(); } break;
                 case "text": if (_mode == "ready" && _workspace == "editor") { SetText(root); AutoSaveEdits(); } break;
@@ -765,6 +766,15 @@ public partial class MainWindow : Window
         StartRun();
     }
 
+    private void StopRequested()
+    {
+        if (_mode == "running") { StopRun("已停止執行。"); return; }
+        if (!_pendingRun) return;
+        _pendingRun = false;
+        _activationWait = null;
+        _message = "已取消等待執行。";
+    }
+
     private string MissingFlowTargetMessage() => _flowPreferences.TargetTitle.Length == 0
         ? "還沒選擇要操作的視窗，請先到「設定」選一個。"
         : $"未找到指定視窗「{_flowPreferences.TargetTitle}」。請先開啟該程式；若已開啟，請重新整理設定中的視窗列表並重新選擇（同名視窗也需重選）。";
@@ -789,19 +799,30 @@ public partial class MainWindow : Window
         var problem = RunPreflight(target);
         if (problem is not null) { _message = problem; Publish(); return; }
         if (Native.GetForegroundWindow() != target.Handle) { _message = "請先切到要操作的視窗，再開始執行。"; Publish(); return; }
+        var run = new CancellationTokenSource();
+        var uiDispatcher = Dispatcher;
         try
         {
             _playbackStopCapture = new PlaybackStopCapture(_hotkeyCode,
-                () => Dispatcher.BeginInvoke(() => StopRun("已停止執行。")));
+                () =>
+                {
+                    // The hook runs on its own thread. Cancel before waiting for the UI
+                    // dispatcher, so a dense script cannot send another step meanwhile.
+                    try { run.Cancel(); }
+                    catch (ObjectDisposedException) { return; }
+                    if (uiDispatcher.HasShutdownStarted) return;
+                    uiDispatcher.BeginInvoke(DispatcherPriority.Input,
+                        new Action(() => StopRun("已停止執行。", run)));
+                });
         }
-        catch (InvalidOperationException error) { _message = error.Message; Publish(); return; }
-        _playback = new CancellationTokenSource();
+        catch (InvalidOperationException error) { run.Dispose(); _message = error.Message; Publish(); return; }
+        _playback = run;
         _lastPlaybackProgressTick = 0;
         _runResult = null;
         _session.BeginRun(); _currentStep = -1; _currentIteration = 0; _waitingForNextRun = false;
         _message = "正在執行；再按快捷鍵可停止。";
         Publish();
-        _ = RunStepsAsync(target, _playback);
+        _ = RunStepsAsync(target, run);
     }
 
     private async Task RunStepsAsync(WindowInfo target, CancellationTokenSource run)
@@ -818,7 +839,7 @@ public partial class MainWindow : Window
             await PlaybackLoop.RunAsync(_script.Execution, _script.Steps,
                 async (iteration, index, step, cancellation) =>
                 {
-                    await Task.Yield();
+                    await System.Windows.Threading.Dispatcher.Yield(DispatcherPriority.Background);
                     cancellation.ThrowIfCancellationRequested();
                     _currentIteration = iteration;
                     _currentStep = index;
@@ -842,9 +863,14 @@ public partial class MainWindow : Window
                     if (!IsTargetReady(target))
                     { StopRun("目標視窗發生變化，已停止執行。", result: RunResult.Interrupted); cancellation.ThrowIfCancellationRequested(); }
                 }, run.Token);
+            run.Token.ThrowIfCancellationRequested();
             StopRun($"執行完成，這次一共跑了 {_currentIteration} 輪。", run, RunResult.Completed);
         }
-        catch (OperationCanceledException) { /* StopRun already updated the UI. */ }
+        catch (OperationCanceledException)
+        {
+            // A physical shortcut can cancel on the hook thread before its UI callback runs.
+            if (_mode == "running" && IsVisible) StopRun("已停止執行。", run);
+        }
         catch (Exception error) { StopRun($"執行失敗：{error.Message}", run, RunResult.Failed); }
         finally
         {
@@ -863,12 +889,13 @@ public partial class MainWindow : Window
                 if (ReferenceEquals(_playback, run) && IsVisible && !Native.ActivateWindow(_handle))
                 { _message += " 沒有順利切回 FlowKey，請從工作列開啟。"; Publish(); }
             }
-            if (ReferenceEquals(_playback, run)) { _playback = null; run.Dispose(); }
-            if (ReferenceEquals(_playbackKeyboard, keyboard)) _playbackKeyboard = null;
             _playbackStopCapture?.Dispose();
             _playbackStopCapture = null;
+            if (ReferenceEquals(_playback, run)) { _playback = null; run.Dispose(); }
+            if (ReferenceEquals(_playbackKeyboard, keyboard)) _playbackKeyboard = null;
             if (_runResult is { } result) ShowRunResult(target.Handle, result, scriptName, _currentIteration);
             _runResult = null;
+            Publish();
         }
     }
 
@@ -902,6 +929,7 @@ public partial class MainWindow : Window
 
     private async Task ExecuteStepAsync(WindowInfo target, ScriptStep step, KeyboardPlayback keyboard, CancellationToken cancellation)
     {
+        cancellation.ThrowIfCancellationRequested();
         if (step.Type is StepType.Click or StepType.DoubleClick or StepType.Scroll)
         {
             var point = new Native.Point { X = step.X, Y = step.Y };
@@ -913,11 +941,16 @@ public partial class MainWindow : Window
             var (down, up) = step.Button switch { "Right" => (0x0008u, 0x0010u), "Middle" => (0x0020u, 0x0040u), _ => (0x0002u, 0x0004u) };
             for (var i = 0; i < (step.Type == StepType.DoubleClick ? 2 : 1); i++)
             {
+                cancellation.ThrowIfCancellationRequested();
                 try { Native.SendMouse(down); }
                 finally { Native.SendMouse(up); }
             }
         }
-        else if (step.Type == StepType.Scroll) Native.SendMouse(0x0800, unchecked((uint)step.WheelDelta));
+        else if (step.Type == StepType.Scroll)
+        {
+            cancellation.ThrowIfCancellationRequested();
+            Native.SendMouse(0x0800, unchecked((uint)step.WheelDelta));
+        }
         else if (step.Type == StepType.Key) keyboard.Execute(step);
         else if (step.Type == StepType.Text)
         {
@@ -927,7 +960,7 @@ public partial class MainWindow : Window
                 if (!IsTargetReady(target)) throw new InvalidOperationException("目標視窗失焦或尺寸變化。");
                 try { Native.SendKey(character, unicode: true); }
                 finally { Native.SendKey(character, release: true, unicode: true); }
-                await Task.Yield();
+                await System.Windows.Threading.Dispatcher.Yield(DispatcherPriority.Background);
             }
         }
     }

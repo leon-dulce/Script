@@ -384,6 +384,7 @@ internal static class DesktopE2E
             Until(() => EvalBool(app, "!document.getElementById('execution-view').hidden"), "close-test execution workspace did not open");
             OpenLibraryScript(app, catalog, secondId);
             hotkey = catalog.Load(secondId)!.Hotkey;
+            VerifyDenseStopAndFinish(app, target, editor, catalog, firstId, secondId, hotkey);
             VerifyLongAltPlaybackAndStop(app, target, editor, hotkey);
             OpenLibraryScript(app, catalog, firstId);
             OpenLibraryScript(app, catalog, secondId);
@@ -962,6 +963,71 @@ internal static class DesktopE2E
         finally { Native.UnhookWindowsHookEx(hook); GC.KeepAlive(callback); }
     }
 
+    private static void VerifyDenseStopAndFinish(MainWindow app, Window target, TextBox editor,
+        ScriptCatalog catalog, string firstId, string secondId, string hotkey)
+    {
+        foreach (var returnToApp in new[] { true, false })
+        {
+            Eval(app, "document.getElementById('nav-settings').click()");
+            Post(app, "{action:'flowSettings',autoSwitch:false,returnToApp:" +
+                returnToApp.ToString().ToLowerInvariant() + ",targetId:''}");
+            Eval(app, "document.getElementById('nav-execution').click()");
+            OpenLibraryScript(app, catalog, secondId);
+            SetPlan(app, "Once", 2, 250);
+            var script = CurrentScript(app);
+            script.Steps =
+            [
+                new ScriptStep { Type = StepType.Text, Text = new string('X', 10000) },
+                new ScriptStep { Type = StepType.Text, Text = "END" }
+            ];
+            Post(app, "{action:'refresh'}");
+            editor.Clear();
+            ActivateTarget(target, editor);
+            PressHotkey(hotkey);
+            Until(() => editor.Text.Length >= 20 && editor.Text.Length < 10000,
+                "dense text replay did not enter a stoppable middle state", 10000);
+            if (returnToApp)
+                Eval(app, "document.getElementById('execution-start').click()");
+            else
+            {
+                var code = (uint)(0x70 + int.Parse(hotkey[1..]) - 1);
+                SendTestKey(app, code);
+                SendTestKey(app, code, keyUp: true);
+            }
+            Until(() => Text(app, "status-text") == "準備好了" &&
+                typeof(MainWindow).GetField("_playback", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(app) is null,
+                "dense playback did not stop and finish cleanup", 5000);
+            var stoppedLength = editor.Text.Length;
+            PumpFor(350);
+            if (editor.Text.Length != stoppedLength || editor.Text.EndsWith("END") || stoppedLength >= 10000)
+                throw new Exception("Dense playback continued sending text after stop.");
+            var expectedFocus = returnToApp ? new WindowInteropHelper(app).Handle : _keyboardTarget;
+            if (Native.GetForegroundWindow() != expectedFocus)
+                throw new Exception("Stopped playback ignored the configured ending window.");
+            OpenLibraryScript(app, catalog, firstId);
+            OpenLibraryScript(app, catalog, secondId);
+        }
+        CurrentScript(app).Steps = [new ScriptStep { Type = StepType.Text, Text = "END", DelayMs = 3000 }];
+        Post(app, "{action:'refresh'}");
+        editor.Clear();
+        ActivateTarget(target, editor);
+        PressHotkey(hotkey);
+        Until(() => Text(app, "status-text") == "正在執行腳本", "focus-race fixture did not start");
+        ActivateWindow(app);
+        Until(() => Text(app, "status-text") is "正在停止腳本" or "準備好了",
+            "focus loss did not cancel the run");
+        Post(app, "{action:'stop'}"); // A stop click already queued before the focus update.
+        Until(() => typeof(MainWindow).GetField("_playback", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(app) is null,
+            "focus-race cancellation did not finish");
+        PumpFor(350);
+        if (editor.Text.Length != 0 || Text(app, "status-text") != "準備好了" ||
+            (bool)typeof(MainWindow).GetField("_pendingRun", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(app)!)
+            throw new Exception("A delayed stop click restarted execution after focus loss.");
+        OpenLibraryScript(app, catalog, firstId);
+        OpenLibraryScript(app, catalog, secondId);
+        Console.WriteLine("PASS Windows UI: dense zero-delay text stops mid-step from button/physical shortcut, sends no later action, follows both ending-window preferences, and late stop cannot restart");
+    }
+
     private static void SendTestKey(MainWindow app, uint key, bool keyUp = false, uint flags = 0)
     {
         Native.GetWindowThreadProcessId(Native.GetForegroundWindow(), out var foregroundProcess);
@@ -1218,7 +1284,7 @@ internal static class DesktopE2E
 
     private static void VerifyAppearance(MainWindow app)
     {
-        if (app.Title != "FlowKey 1.0.2 Stable") throw new Exception("The release version is missing from the Windows title.");
+        if (app.Title != "FlowKey 1.0.3 Stable") throw new Exception("The release version is missing from the Windows title.");
         Until(() => EvalBool(app, "document.fonts.check('600 24px \"FlowKey Serif\"','錄製與編輯') && document.querySelector('.brand img').naturalWidth>0"), "offline font or logo failed to load", 30000);
         if (app.Icon is null || !EvalBool(app, "document.documentElement.lang==='zh-Hant' && getComputedStyle(document.querySelector('.sidebar')).backgroundColor==='rgb(34, 39, 48)' && getComputedStyle(document.querySelector('.topbar')).display==='none' && !document.querySelector('.demo-badge')"))
             throw new Exception("Traditional Chinese layout or window icon missing.");

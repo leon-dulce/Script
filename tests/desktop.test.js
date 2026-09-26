@@ -479,7 +479,7 @@ test('execution can be requested without manual target selection and displays pe
   assert.match(get('execution-help').textContent, /再次點選可取消等待/);
   assert.doesNotMatch(get('execution-help').textContent, /按快捷鍵可取消/);
   get('execution-start').click();
-  assert.equal(sent.at(-1).action, 'run');
+  assert.equal(sent.at(-1).action, 'stop');
   push(state({ workspace: 'execution', selectedId: '', message: '視窗尺寸與錄製時不同，無法執行。' }));
   assert.equal(get('execution-view').hidden, false);
   assert.match(get('execution-message').textContent, /無法執行/);
@@ -633,6 +633,22 @@ test('settings navigation sits immediately above the local library footer', () =
   assert.equal((html.match(/id="nav-settings"/g)||[]).length,1);
   assert.match(html, /\.sidebar-settings\{margin-top:auto;/);
 });
+test('stop button has a separate action and cannot restart during cleanup', () => {
+  const {get, sent, state, push} = desktop();
+  push(state({workspace:'execution',mode:'running'}));
+  get('execution-start').click();
+  assert.equal(sent.at(-1).action,'stop');
+  const count = sent.length;
+  push(state({workspace:'execution',stopping:true}));
+  assert.equal(get('execution-start').disabled,true);
+  assert.equal(get('execution-start').textContent,'正在停止…');
+  assert.equal(get('status-text').textContent,'正在停止腳本');
+  get('execution-start').click();
+  assert.equal(sent.length,count);
+  push(state({workspace:'execution'}));
+  get('execution-start').click();
+  assert.equal(sent.at(-1).action,'run');
+});
 
 test('long playback progress updates the active row without rebuilding hundreds of steps', () => {
   const {get, state, push} = desktop();
@@ -661,7 +677,7 @@ test('automatic switching shows pending feedback and supports cancelling instead
   const {get,state,push,sent}=desktop();
   push(state({workspace:'execution',pendingRun:true,switchingWindow:true,flow:{autoSwitch:true,returnToApp:true,targetTitle:'目標',targetId:'123'}}));
   assert.match(get('execution-help').textContent,/正在自動切換/);
-  get('execution-start').click(); assert.equal(sent.at(-1).action,'run');
+  get('execution-start').click(); assert.equal(sent.at(-1).action,'stop');
   push(state({workspace:'execution',message:'未找到指定視窗「目標」。請先開啟該程式。'}));
   assert.match(get('execution-message').textContent,/未找到指定視窗/);
 });

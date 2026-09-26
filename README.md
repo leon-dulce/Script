@@ -1,8 +1,8 @@
 # FlowKey
 
-目前版本：**1.0.2 Stable**。
+目前版本：**1.0.3 Stable**。
 
-Current release: **1.0.2 Stable**.
+Current release: **1.0.3 Stable**.
 
 ## 繁體中文
 

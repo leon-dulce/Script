@@ -12,7 +12,7 @@
   let lastRecordedStep = '';
   let highlightedExecutionRow = null;
 
-  const isBusy = () => !state || state.mode !== 'ready' || state.pendingRecord || state.pendingRun || state.namingRequired;
+  const isBusy = () => !state || state.mode !== 'ready' || state.pendingRecord || state.pendingRun || state.stopping || state.namingRequired;
   const hasSavedScript = () => state.savedScripts.some(script => script.id === state.script.id);
 
   function executionLabel(plan) {
@@ -163,8 +163,8 @@
     $('execution-hotkey').value = state.script.hotkey;
     $('execution-hotkey').disabled = settingsDisabled;
     const active = state.mode === 'running' || state.pendingRun;
-    $('execution-start').disabled = !active && (isBusy() || !saved || !state.script.steps.length);
-    $('execution-start').textContent = active ? '■ 停止執行' : '▶ 開始執行';
+    $('execution-start').disabled = !!state.stopping || (!active && (isBusy() || !saved || !state.script.steps.length));
+    $('execution-start').textContent = state.stopping ? '正在停止…' : active ? '■ 停止執行' : '▶ 開始執行';
     $('execution-start').className = `button ${active ? 'danger' : 'primary'}`;
     $('execution-help').textContent = state.pendingRun
       ? (state.switchingWindow ? '正在自動切換視窗，就緒後開始；再次點選可取消。' : '已準備執行，切回目標視窗後開始；再次點選可取消等待。')
@@ -183,7 +183,7 @@
     $('cycle-number').textContent = state.mode === 'running'
       ? `${state.currentIteration}${plan.mode === 'Count' ? ` / ${plan.repeatCount}` : ''}${state.waitingForNextRun ? ' · 等待下一輪' : ''}`
       : '—';
-    $('execution-progress-label').textContent = state.waitingForNextRun ? '等待下一輪' : state.mode === 'running' ? '執行中' : state.pendingRun ? '等待目標視窗' : '準備就緒';
+    $('execution-progress-label').textContent = state.stopping ? '停止中' : state.waitingForNextRun ? '等待下一輪' : state.mode === 'running' ? '執行中' : state.pendingRun ? '等待目標視窗' : '準備就緒';
     const current = state.mode === 'running' && !state.waitingForNextRun ? state.currentStep + 1 : 0;
     const steps = saved ? state.script.steps : [];
     $('execution-progress-fraction').textContent = `${current} / ${steps.length}`;
@@ -410,7 +410,7 @@
     renderFlowSettings();
     renderCompletionSettings();
     $('nav-execution').disabled = isBusy();
-    $('status-text').textContent = state.namingRequired ? '錄好了，幫腳本取個名字吧' : ({ ready: '準備好了', recording: '正在錄製', paused: '錄製已暫停', running: '正在執行腳本' })[state.mode] || '錯誤';
+    $('status-text').textContent = state.stopping ? '正在停止腳本' : state.namingRequired ? '錄好了，幫腳本取個名字吧' : ({ ready: '準備好了', recording: '正在錄製', paused: '錄製已暫停', running: '正在執行腳本' })[state.mode] || '錯誤';
     $('status-hint').textContent = state.message;
     $('restart-admin').hidden = !!state.elevated;
     $('restart-admin').disabled = isBusy();
@@ -481,7 +481,7 @@
     });
     for (const id of ['mode-once', 'mode-count', 'mode-continuous', 'repeat-count', 'repeat-interval'])
       $(id).addEventListener('change', submitExecution);
-    $('execution-start').addEventListener('click', () => send('run'));
+    $('execution-start').addEventListener('click', () => send(state.mode === 'running' || state.pendingRun ? 'stop' : 'run'));
     $('recording-name-dialog').addEventListener('cancel', event => event.preventDefault());
     $('recording-name-confirm').addEventListener('click', saveRecording);
     $('recording-name-input').addEventListener('keydown', event => {
