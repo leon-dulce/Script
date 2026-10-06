@@ -26,8 +26,8 @@ test('README explains FlowKey in Traditional Chinese and English with valid loca
   const root = path.join(__dirname, '..');
   const readme = fs.readFileSync(path.join(root, 'README.md'), 'utf8');
   assert.match(readme, /^# FlowKey\r?\n/m);
-  assert.match(readme, /目前版本：\*\*1\.0\.3 Stable\*\*/);
-  assert.match(readme, /Current release: \*\*1\.0\.3 Stable\*\*/);
+  assert.match(readme, /目前版本：\*\*2\.0\.4 Stable\*\*/);
+  assert.match(readme, /Current release: \*\*2\.0\.4 Stable\*\*/);
   assert.match(readme, /^## 繁體中文\r?\n\r?\n/m);
   assert.match(readme, /^## English\r?\n\r?\n/m);
   assert.match(readme, /錄製鍵盤操作/);
@@ -46,15 +46,15 @@ test('README explains FlowKey in Traditional Chinese and English with valid loca
   }
 });
 
-test('desktop release metadata and title identify 1.0.3 Stable', () => {
+test('desktop release metadata and title identify 2.0.4 Stable', () => {
   const root = path.join(__dirname, '..');
   const project = fs.readFileSync(path.join(root, 'FlowKey.Desktop/FlowKey.Desktop.csproj'), 'utf8');
   const window = fs.readFileSync(path.join(root, 'FlowKey.Desktop/MainWindow.xaml'), 'utf8');
-  for (const value of ['<Version>1.0.3</Version>', '<Product>FlowKey</Product>',
-    '<AssemblyVersion>1.0.3.0</AssemblyVersion>', '<FileVersion>1.0.3.0</FileVersion>',
-    '<InformationalVersion>1.0.3 Stable</InformationalVersion>'])
+  for (const value of ['<Version>2.0.4</Version>', '<Product>FlowKey</Product>',
+    '<AssemblyVersion>2.0.4.0</AssemblyVersion>', '<FileVersion>2.0.4.0</FileVersion>',
+    '<InformationalVersion>2.0.4 Stable</InformationalVersion>'])
     assert.ok(project.includes(value), `missing release metadata: ${value}`);
-  assert.match(window, /Title="FlowKey 1\.0\.3 Stable"/);
+  assert.match(window, /Title="FlowKey 2\.0\.4 Stable"/);
 });
 
 test('root executable is a real Windows application stored with Git LFS', () => {

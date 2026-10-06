@@ -11,11 +11,11 @@ if (typeof(MainWindow).GetConstructor(Type.EmptyTypes) is null)
 Console.WriteLine("PASS WPF startup can construct MainWindow");
 
 var desktopAssembly = typeof(MainWindow).Assembly;
-if (desktopAssembly.GetName().Version != new Version(1, 0, 3, 0) ||
-    desktopAssembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion != "1.0.3 Stable" ||
-    desktopAssembly.GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version != "1.0.3.0")
-    throw new Exception("Desktop assembly does not identify the 1.0.3 Stable release.");
-Console.WriteLine("PASS desktop assembly carries 1.0.3 Stable version metadata");
+if (desktopAssembly.GetName().Version != new Version(2, 0, 4, 0) ||
+    desktopAssembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion != "2.0.4 Stable" ||
+    desktopAssembly.GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version != "2.0.4.0")
+    throw new Exception("Desktop assembly does not identify the 2.0.4 Stable release.");
+Console.WriteLine("PASS desktop assembly carries 2.0.4 Stable version metadata");
 
 if (Marshal.SizeOf<Native.Input>() != 40) throw new Exception("SendInput layout must be 40 bytes on x64.");
 if (Marshal.SizeOf<Native.KeyboardData>() != 24) throw new Exception("Keyboard hook layout mismatch.");
